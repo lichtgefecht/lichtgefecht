@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/components/foo/include",
+                "${workspaceFolder}/components/bar/include"
+
+            ],
+            "cStandard": "gnu11"
+        }
+    ],
+    "version": 4
+}
