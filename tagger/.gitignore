@@ -5,3 +5,5 @@ dependencies.lock
 sdkconfig
 sdkconfig.*
 !sdkconfig.platform
+
+reflector/target/

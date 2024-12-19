@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "esp_chip_info.h": "c",
+        "esp_flash.h": "c",
+        "esp_log.h": "c"
+    }
+}

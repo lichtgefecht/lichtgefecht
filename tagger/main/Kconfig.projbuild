@@ -1,0 +1,9 @@
+menu "Tagger Configuration"
+
+    config FOO
+        string "The Foo"
+        default "the foo string"
+        help
+            whatever
+
+endmenu

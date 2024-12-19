@@ -5,8 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/components/foo/include",
-                "${workspaceFolder}/components/bar/include"
-
+                "${workspaceFolder}/components/bar/include",
+                "/home/marco/Documents/projects/lichtgefecht/esp/esp-idf/**"
             ],
             "cStandard": "gnu11"
         }
