@@ -6,10 +6,13 @@
 #include <stdio.h>
 #include "diag.h"
 #include "tagger.h"
+#include "peripherals.h"
 
 void app_main(void) {
     
   selftest("Tagger");
+
+  wifi_init_station();
 
   ESP_LOGI(TAGGER_TAG, "Hello world!\n");
 
