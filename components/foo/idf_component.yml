@@ -1,5 +1,0 @@
-dependencies:
-  bar:
-    path: ../../components/bar
-  nvs_flash:
-    version: 3.3.1

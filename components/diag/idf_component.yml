@@ -1,0 +1,3 @@
+dependencies:
+  nvs_flash:
+    version: ">=5.0"

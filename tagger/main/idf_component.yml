@@ -1,3 +1,3 @@
 dependencies:
-  foo:
-    path: ../../components/foo
+  diag:
+    path: ../../components/diag

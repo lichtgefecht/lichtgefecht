@@ -7,3 +7,4 @@ all:
 clean:
 	rm -f sdkconfig
 	rm -f sdkconfig.defaults
+	rm -rf build
