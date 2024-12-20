@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+echo "Formatting..."
+
+# Run the script
+./format.sh
+
+# Check if clang-format produced any changes
+if ! git diff --quiet; then
+    echo "Code was auto-formatted. Please review and commit the changes."
+    exit 1
+else
+    echo "Code looks stinky but let's commit"
+fi
