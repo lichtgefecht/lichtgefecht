@@ -1,5 +1,0 @@
-dependencies:
-  diag:
-    path: ../../components/diag
-  peripherals:
-    path: ../../components/peripherals
