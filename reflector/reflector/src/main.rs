@@ -1,24 +1,29 @@
-use std::error::Error;
-use std::io;
-use tokio::net::UdpSocket;
+use std::sync::Arc;
 
-async fn run(socket: UdpSocket) -> Result<(), io::Error> {
-    let mut buf = vec![0; 1024];
-    let mut to_send = None;
+use log::{error, info};
+use tokio::signal;
+use transport::{Transport, UdpTransport};
 
-    loop {
-        if let Some((size, peer)) = to_send {
-            let amt = socket.send_to(&buf[..size], &peer).await?;
-            println!("Echoed {amt}/{size} bytes to {peer}");
-        }
-        to_send = Some(socket.recv_from(&mut buf).await?);
-    }
-}
+mod transport;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let socket = UdpSocket::bind(&"0.0.0.0:3333").await?;
-    println!("Listening on: {}", socket.local_addr()?);
-    run(socket).await?;
-    Ok(())
+async fn main() {
+    env_logger::init();
+
+    let transport = UdpTransport::new();
+    let transport = Arc::new(transport);
+
+    let tc = transport.clone();
+    tokio::spawn(async move {
+        let cc = signal::ctrl_c().await;
+        match cc {
+            Ok(_) => {
+                info!("Received ctrl_c, shutting down reflector");
+                tc.stop();
+            }
+            Err(e) => error!("Error waiting for ctrl_c: {}", e),
+        }
+    });
+
+    let _ = transport.run().await;
 }

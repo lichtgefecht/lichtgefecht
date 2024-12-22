@@ -2,6 +2,6 @@
 
 members = [
     "reflector", 
-    "reflector-cli",
+    "reflector-cli", "reflector-core",
 ]
 resolver = "2" 
