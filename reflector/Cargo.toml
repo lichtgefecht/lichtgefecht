@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
-    "reflector-bin",
+    "reflector", 
+    "reflector-cli",
 ]
 resolver = "2" 

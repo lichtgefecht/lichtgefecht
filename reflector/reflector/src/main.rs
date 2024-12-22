@@ -3,7 +3,7 @@ use std::io;
 use tokio::net::UdpSocket;
 
 async fn run(socket: UdpSocket) -> Result<(), io::Error> {
-    let mut buf =  vec![0; 1024];
+    let mut buf = vec![0; 1024];
     let mut to_send = None;
 
     loop {
