@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use log::{error, info};
+use reflector_core::Core;
 use tokio::signal;
 use transport::{Transport, UdpTransport};
 
@@ -10,13 +11,18 @@ mod transport;
 async fn main() {
     env_logger::init();
 
-    let transport = UdpTransport::new();
+    let core = Core::new();
+
+    let transport = UdpTransport::new(core);
     let transport = Arc::new(transport);
 
-    let tc = transport.clone();
+    add_int_hook(transport.clone());
+    let _ = transport.run().await;
+}
+
+fn add_int_hook(tc: Arc<UdpTransport>) {
     tokio::spawn(async move {
-        let cc = signal::ctrl_c().await;
-        match cc {
+        match signal::ctrl_c().await {
             Ok(_) => {
                 info!("Received ctrl_c, shutting down reflector");
                 tc.stop();
@@ -24,6 +30,4 @@ async fn main() {
             Err(e) => error!("Error waiting for ctrl_c: {}", e),
         }
     });
-
-    let _ = transport.run().await;
 }
