@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use crate::transport::Transport;
+use crate::transport::{Stoppable, Transport};
 use bytes::Bytes;
 use log::{error, info, warn};
 use reflector_core::Core;
@@ -92,7 +92,9 @@ impl Transport for UdpTransport {
             }
         }
     }
+}
 
+impl Stoppable for UdpTransport{
     fn stop(&self) {
         self.shutting_down
             .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -100,6 +102,8 @@ impl Transport for UdpTransport {
         info!("Stopping UdpTransport")
     }
 }
+
+
 impl UdpTransport {
     fn handle_recv_buffer(&self, rcv: (usize, SocketAddr), _buf: &[u8]) {
         let (size, peer) = rcv;
