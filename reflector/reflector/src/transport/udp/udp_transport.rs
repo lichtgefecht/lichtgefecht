@@ -44,18 +44,18 @@ impl Transport for UdpTransport {
 
         let (tx, mut rx) = mpsc::channel(512);
 
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                info!("Announcing my presence");
-                tx.send(Frame(
-                    BCA,
-                    Bytes::copy_from_slice("test".as_bytes()),
-                ))
-                .await
-                .expect("Kaboom");
-            }
-        });
+        // tokio::spawn(async move {
+        //     loop {
+        //         tokio::time::sleep(Duration::from_secs(1)).await;
+        //         info!("Announcing my presence");
+        //         tx.send(Frame(
+        //             BCA,
+        //             Bytes::copy_from_slice("test".as_bytes()),
+        //         ))
+        //         .await
+        //         .expect("Kaboom");
+        //     }
+        // });
 
         let mut buf = vec![0; 1024];
         // let mut to_send = None;

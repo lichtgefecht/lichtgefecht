@@ -1,6 +1,6 @@
-use std::io::IoSliceMut;
+use std::io::{IoSliceMut, Write};
 use std::mem::MaybeUninit;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::os::fd::{AsFd, AsRawFd};
 use std::{net::SocketAddr, sync::atomic::AtomicBool};
 
@@ -33,32 +33,31 @@ impl SyncTransport for UdpTransport2{
     fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
 
 
-        let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+        let mut socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
         let address: SocketAddr = "0.0.0.0:3333".parse().unwrap();
         let address = address.into();
         let fd = socket.as_fd();
-        setsockopt(&fd, Ipv4PacketInfo, &true).unwrap();
         socket.bind(&address)?;
-
-
         let mut cmsg = cmsg_space!(in_pktinfo);
 
-        // 1. setsockopt IP_PKTINFO
         setsockopt(&fd, Ipv4PacketInfo, &true).unwrap();
+        let buf: &mut [u8] = &mut [0; 2048];
+        let iov = &mut [IoSliceMut::new(buf)];
     
         loop {
-            // 2. recvmsg from socket
-            let buf: &mut [u8] = &mut [0; 2048];
-            let iov = &mut [IoSliceMut::new(buf)];
     
             let fd = fd.as_raw_fd();
             let res:RecvMsg<'_, '_, SockaddrIn> = recvmsg(fd, iov, Some(&mut cmsg), MsgFlags::empty()).unwrap();
             match res.cmsgs().unwrap().next().unwrap() {
-                ControlMessageOwned::Ipv4PacketInfo(info) => {
-    
+                ControlMessageOwned::Ipv4PacketInfo(info) => {  
                     
-                    let addr = Ipv4Addr::from_bits(info.ipi_spec_dst.s_addr.to_be());
-                    info!("got {:?}", addr);
+                    let receiver = Ipv4Addr::from_bits(info.ipi_spec_dst.s_addr.to_be());
+                    let sender = res.address.unwrap();
+                    info!("sender {sender} sent to rcv {receiver:?}");
+                    let sender = SocketAddrV4::new(sender.ip(), sender.port()).into();
+                    let written = socket.send_to("test123\n".as_bytes(), &sender).unwrap();
+                    info!("Wrote {written} bytes to {}", sender.as_socket_ipv4().unwrap());
+                    // socket.flush();
                 },
                 _ => break,
             };

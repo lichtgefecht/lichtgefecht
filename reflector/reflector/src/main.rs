@@ -4,7 +4,7 @@ use env_logger::Env;
 use log::{error, info};
 use reflector_core::Core;
 use tokio::signal;
-use transport::{Stoppable, SyncTransport, Transport, UdpTransport2};
+use transport::{Stoppable, SyncTransport, Transport, UdpTransport, UdpTransport2};
 
 mod transport;
 
