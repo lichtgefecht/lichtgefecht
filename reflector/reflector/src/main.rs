@@ -18,7 +18,7 @@ async fn main() {
     // let transport = UdpTransport::new(core);
     let transport = Arc::new(transport);
 
-    // add_int_hook(transport.clone());
+    add_int_hook(transport.clone());
     let _ = transport.run();
 }
 

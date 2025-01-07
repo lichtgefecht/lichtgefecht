@@ -12,7 +12,7 @@ use nix::libc::c_int;
 use nix::sys::socket::{recvmsg, setsockopt, ControlMessage, ControlMessageOwned, MsgFlags, RecvMsg, SockaddrIn};
 use nix::sys::socket::sockopt::Ipv4PacketInfo;
 use libc::in_addr;
-use socket2::{Domain, MaybeUninitSlice, MsgHdrMut, Socket, Type};
+use socket2::{Domain, Socket, Type};
 use nix::cmsg_space;
 use super::{Stoppable, SyncTransport};
 

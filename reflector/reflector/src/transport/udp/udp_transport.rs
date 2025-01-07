@@ -38,24 +38,24 @@ impl Transport for UdpTransport {
     async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
-        let socket = UdpSocket::bind(&"192.168.0.146:3333").await?;
+        let socket = UdpSocket::bind(&"127.0.0.1:3333").await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
         let (tx, mut rx) = mpsc::channel(512);
 
-        // tokio::spawn(async move {
-        //     loop {
-        //         tokio::time::sleep(Duration::from_secs(1)).await;
-        //         info!("Announcing my presence");
-        //         tx.send(Frame(
-        //             BCA,
-        //             Bytes::copy_from_slice("test".as_bytes()),
-        //         ))
-        //         .await
-        //         .expect("Kaboom");
-        //     }
-        // });
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                info!("Announcing my presence");
+                tx.send(Frame(
+                    BCA,
+                    Bytes::copy_from_slice("test".as_bytes()),
+                ))
+                .await
+                .expect("Kaboom");
+            }
+        });
 
         let mut buf = vec![0; 1024];
         // let mut to_send = None;

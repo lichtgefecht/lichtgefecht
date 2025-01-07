@@ -1,0 +1,18 @@
+syntax = "proto2";
+
+message AMessage {
+  required int32 a=1; 
+  optional int32 b=2;
+  oneof inner{
+    Foo foo = 3;
+    Bar bar = 4;
+  }
+}
+
+message Foo{
+  required int32 foole=1;
+}
+
+message Bar{
+    required string baerle=1;
+}
