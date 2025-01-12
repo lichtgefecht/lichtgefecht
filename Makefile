@@ -9,4 +9,4 @@ tagger: proto-c
 	make -C tagger
 
 proto-c:
-	protoc-c --c_out=tagger/main/api --proto_path=api what.proto
+	protoc-c --c_out=components/codec/api --proto_path=api what.proto
