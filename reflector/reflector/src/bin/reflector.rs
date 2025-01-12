@@ -2,12 +2,10 @@ use std::sync::Arc;
 
 use env_logger::Env;
 use log::{error, info};
+use reflector;
+use reflector::transport::{Stoppable, Transport, UdpTransport};
 use reflector_core::Core;
 use tokio::signal;
-use transport::{Stoppable, Transport, UdpTransport};
-
-mod codec;
-mod transport;
 
 #[tokio::main]
 async fn main() {
