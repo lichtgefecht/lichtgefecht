@@ -48,12 +48,9 @@ impl Transport for UdpTransport {
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 info!("Announcing my presence");
-                tx.send(Frame(
-                    BCA,
-                    Bytes::copy_from_slice("test".as_bytes()),
-                ))
-                .await
-                .expect("Kaboom");
+                tx.send(Frame(BCA, Bytes::copy_from_slice("test".as_bytes())))
+                    .await
+                    .expect("Kaboom");
             }
         });
 
@@ -94,7 +91,7 @@ impl Transport for UdpTransport {
     }
 }
 
-impl Stoppable for UdpTransport{
+impl Stoppable for UdpTransport {
     fn stop(&self) {
         self.shutting_down
             .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -102,7 +99,6 @@ impl Stoppable for UdpTransport{
         info!("Stopping UdpTransport")
     }
 }
-
 
 impl UdpTransport {
     fn handle_recv_buffer(&self, rcv: (usize, SocketAddr), _buf: &[u8]) {

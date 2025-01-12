@@ -1,5 +1,12 @@
 # Lichtgefecht
 
+## Requirements
+
+- `protoc`
+- `protoc-c`
+
+## mhm?
+
 ```
 . ../esp/esp-idf/export.sh
 idf.py set-target esp32s3

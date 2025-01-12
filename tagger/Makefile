@@ -2,7 +2,7 @@ all:
 	rm -f sdkconfig
 	rm -f sdkconfig.defaults 
 	cat sdkconfig.platform sdkconfig.secret > sdkconfig.defaults
-	idf.py --ccache -p /dev/ttyACM0 flash monitor
+	idf.py --ccache build
 
 clean:
 	rm -f sdkconfig

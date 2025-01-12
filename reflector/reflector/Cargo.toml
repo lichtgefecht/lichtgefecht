@@ -13,6 +13,9 @@ log = "0.4.22"
 tokio-util = "0.7.13"
 futures = "0.3.31"
 bytes = "1.9.0"
-socket2 = "0.5.8"
-nix = { version = "0.29.0", features = ["net","socket", "uio"] }
-libc = "0.2.169"
+prost = "0.13.4"
+prost-types = "0.13.4"
+
+[build-dependencies]
+prost-build = "0.13.4"
+

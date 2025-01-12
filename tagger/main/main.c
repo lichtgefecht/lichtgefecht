@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "peripherals.h"
-#include "foo/what.pb-c.h"
+#include "api/what.pb-c.h"
 
 static const char* TAG = "tagger_main";
 
@@ -15,10 +15,10 @@ void app_main(void) {
     selftest("Tagger");
 
 
-    AMessage msg = AMESSAGE__INIT;
-    AMessage *msg_result;
+    Lichtgefecht__AMessage msg = LICHTGEFECHT__AMESSAGE__INIT;
+    Lichtgefecht__AMessage *msg_result;
 
-    Bar bar = BAR__INIT;
+    Lichtgefecht__Bar bar = LICHTGEFECHT__BAR__INIT;
     char* baerle = "flauschig";
     // char* baerle = malloc(12);
     
@@ -33,12 +33,12 @@ void app_main(void) {
     msg.b = 2; 
 
     msg.bar = &bar;
-    msg.inner_case = AMESSAGE__INNER_BAR;
+    msg.inner_case = LICHTGEFECHT__AMESSAGE__INNER_BAR;
     
-    len = amessage__get_packed_size(&msg);
+    len = lichtgefecht__amessage__get_packed_size(&msg);
     
     buf = calloc(1, len);
-    amessage__pack(&msg,buf);
+    lichtgefecht__amessage__pack(&msg,buf);
 
     for (int i = 0; i<len; i++){
         printf("%02x ",(unsigned int)((unsigned char*)buf)[i]);
@@ -50,7 +50,7 @@ void app_main(void) {
     // fwrite(buf,len,1,stderr);
 
     size_t msg_len = len;
-    msg_result = amessage__unpack(NULL, msg_len, buf);	
+    msg_result = lichtgefecht__amessage__unpack(NULL, msg_len, buf);	
     if (msg_result == NULL)
     {
         ESP_LOGI(TAG, "unpack fail");

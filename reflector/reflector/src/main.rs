@@ -4,8 +4,9 @@ use env_logger::Env;
 use log::{error, info};
 use reflector_core::Core;
 use tokio::signal;
-use transport::{Stoppable, SyncTransport, Transport, UdpTransport, UdpTransport2};
+use transport::{Stoppable, Transport, UdpTransport};
 
+mod codec;
 mod transport;
 
 #[tokio::main]
@@ -14,15 +15,14 @@ async fn main() {
 
     let core = Core::new();
 
-    let transport = UdpTransport2::new();
-    // let transport = UdpTransport::new(core);
+    let transport = UdpTransport::new(core);
     let transport = Arc::new(transport);
 
     add_int_hook(transport.clone());
-    let _ = transport.run();
+    let _ = transport.run().await;
 }
 
-fn add_int_hook(tc: Arc<dyn Stoppable + Send + Sync>)  {
+fn add_int_hook(tc: Arc<dyn Stoppable + Send + Sync>) {
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(_) => {

@@ -13,17 +13,20 @@ pub struct Player {}
 pub struct Binding {}
 
 pub struct Core {
-    running: AtomicBool
+    running: AtomicBool,
 }
 impl Core {
     pub fn new() -> Self {
         Core {
-            running: AtomicBool::new(true)
+            running: AtomicBool::new(true),
         }
     }
 
     pub fn on_message_received(&self) {
-        info!("Received message, temp {}", self.running.load(std::sync::atomic::Ordering::Relaxed))
+        info!(
+            "Received message, temp {}",
+            self.running.load(std::sync::atomic::Ordering::Relaxed)
+        )
     }
 }
 
