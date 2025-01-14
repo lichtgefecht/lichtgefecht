@@ -15,6 +15,9 @@ use tokio::{
     sync::{mpsc, Notify},
 };
 
+use crate::codec::lg;
+use prost::Message;
+
 pub struct UdpTransport {
     hid: String,
     shutdown_notify: Arc<Notify>,
@@ -45,54 +48,69 @@ impl Transport for UdpTransport {
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
-        let (tx, mut rx) = mpsc::channel(512);
+        // let (tx, mut rx) = mpsc::channel(512);
 
         let hid = self.hid.clone();
 
-        tokio::spawn(async move {
+        // tokio::spawn(async move {
+            
+            // let mut msg = lg::Msg::new();
+
+            let ip_addr = lg::IpAddr{
+                ip: "localhost".to_string(),
+                port: 3333
+            };
+
+            let mut buf = Vec::new();
+            ip_addr.encode(&mut buf).unwrap();
+
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 info!("Announcing my presence: {hid}");
-                tx.send(Frame(BCA, Bytes::copy_from_slice("test".as_bytes())))
-                    .await
-                    .expect("Kaboom");
+
+                socket.send_to(&buf, BCA).await.unwrap();
+                
+                // tx.send(Frame(BCA, buf.clone()))
+                //     .await
+                //     .expect("Kaboom");
             }
-        });
+        // });
+        // return Ok(());
 
-        let mut buf = vec![0; 1024];
-        // let mut to_send = None;
+        // let mut buf = vec![0; 1024];
+        // // let mut to_send = None;
 
-        let notif = self.shutdown_notify.clone();
-        loop {
-            // either receive a packet or receive the shutdown notification
-            select! {
-                frame = rx.recv() =>{
-                    match frame{
-                        Some(frame) => self.handle_send(frame, &socket).await,
-                        None => todo!(),
-                    }
-                }
-                rcv = socket.recv_from(&mut buf) =>{
-                    match rcv{
-                        Ok(rcv) =>  self.handle_recv_buffer(rcv, &buf),
-                        Err(e) => error!("rcv error: {e}")
-                    }
-                }
-                _ = notif.notified() =>{
-                    warn!("Shutdown notification");
-                    return Ok(());
-                }
-            };
+        // let notif = self.shutdown_notify.clone();
+        // loop {
+        //     // either receive a packet or receive the shutdown notification
+        //     select! {
+        //         frame = rx.recv() =>{
+        //             match frame{
+        //                 Some(frame) => self.handle_send(frame, &socket).await,
+        //                 None => todo!(),
+        //             }
+        //         }
+        //         rcv = socket.recv_from(&mut buf) =>{
+        //             match rcv{
+        //                 Ok(rcv) =>  self.handle_recv_buffer(rcv, &buf),
+        //                 Err(e) => error!("rcv error: {e}")
+        //             }
+        //         }
+        //         _ = notif.notified() =>{
+        //             warn!("Shutdown notification");
+        //             return Ok(());
+        //         }
+        //     };
 
-            // if select is not fair, we might starve the shutdown notifications
-            // therefore, the shutting_down boolean is checked after each receive
-            if self
-                .shutting_down
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                return Ok(());
-            }
-        }
+        //     // if select is not fair, we might starve the shutdown notifications
+        //     // therefore, the shutting_down boolean is checked after each receive
+        //     if self
+        //         .shutting_down
+        //         .load(std::sync::atomic::Ordering::Relaxed)
+        //     {
+        //         return Ok(());
+        //     }
+        // }
     }
     
     fn send(&self) {

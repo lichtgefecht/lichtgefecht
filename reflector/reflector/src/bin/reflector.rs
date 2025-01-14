@@ -9,14 +9,14 @@ use tokio::signal;
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     let core = Core::new();
 
     let transport = UdpTransport::new(core, "test".into());
     let transport = Arc::new(transport);
 
-    add_int_hook(transport.clone());
+    // add_int_hook(transport.clone());
     let _ = transport.run().await;
 }
 
