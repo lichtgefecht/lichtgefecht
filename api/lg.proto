@@ -1,20 +1,54 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package lg;
 
-message AMessage {
-  required int32 a=1; 
-  optional int32 b=2;
-  oneof inner{
-    Foo foo = 3;
-    Bar bar = 4;
+message Msg {
+
+  string hid = 1;
+  oneof inner {
+    Broadcast broadcast = 2;
+    BroadcastReply broadcastReply = 3;
+    TargetHit targetHit = 4;
+  }  
+}
+
+message TargetHit{
+  int32 fromId = 1;
+}
+
+message Broadcast {
+  TransportLayer transportLayer = 1;
+  oneof addr {
+    IpAddr ipAddr = 2;
+    FunkAddr funkAddr = 3;
   }
+  DeviceType deviceType = 4;
 }
 
-message Foo{
-  required int32 foole=1;
+message BroadcastReply {
+  TransportLayer transportLayer = 1;
+  oneof addr {
+    IpAddr ipAddr = 2;
+    FunkAddr funkAddr = 3;
+  }
+  DeviceType deviceType = 4;
 }
 
-message Bar{
-    required string baerle=1;
+enum DeviceType {
+  REFLECTOR = 0;
+  TAGGER = 1;
+}
+
+enum TransportLayer {
+  IP = 0;
+  FUNK = 1;
+}
+
+message IpAddr {
+  string ip = 1;
+  int32 port = 2;
+}
+
+message FunkAddr {
+  string addr = 1;
 }

@@ -13,7 +13,7 @@ async fn main() {
 
     let core = Core::new();
 
-    let transport = UdpTransport::new(core);
+    let transport = UdpTransport::new(core, "test".into());
     let transport = Arc::new(transport);
 
     add_int_hook(transport.clone());

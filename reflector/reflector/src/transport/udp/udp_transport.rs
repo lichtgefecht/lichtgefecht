@@ -16,25 +16,28 @@ use tokio::{
 };
 
 pub struct UdpTransport {
+    hid: String,
     shutdown_notify: Arc<Notify>,
     shutting_down: AtomicBool,
     core: Core,
 }
-impl UdpTransport {
-    pub fn new(core: Core) -> Self {
-        UdpTransport {
-            shutdown_notify: Arc::new(Notify::new()),
-            shutting_down: AtomicBool::new(false),
-            core,
-        }
-    }
-}
+
 
 const BCA: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 3333));
 
 struct Frame(SocketAddr, Bytes);
 
 impl Transport for UdpTransport {
+
+    fn new(core: Core, hid: String) -> Self {
+        UdpTransport {
+            shutdown_notify: Arc::new(Notify::new()),
+            shutting_down: AtomicBool::new(false),
+            core,
+            hid
+        }
+    }
+
     async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
@@ -44,10 +47,12 @@ impl Transport for UdpTransport {
 
         let (tx, mut rx) = mpsc::channel(512);
 
+        let hid = self.hid.clone();
+
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                info!("Announcing my presence");
+                info!("Announcing my presence: {hid}");
                 tx.send(Frame(BCA, Bytes::copy_from_slice("test".as_bytes())))
                     .await
                     .expect("Kaboom");
@@ -88,6 +93,10 @@ impl Transport for UdpTransport {
                 return Ok(());
             }
         }
+    }
+    
+    fn send(&self) {
+        todo!()
     }
 }
 

@@ -4,7 +4,7 @@ all: reflector tagger
 
 reflector: proto-c
 	cd components/codec && cmake -S . -B build -DTESTING=ON && cmake --build build --parallel 24 && ./build/codecTest
-	cd reflector && cargo make
+	cd reflector && cargo test && cargo build
 
 tagger: proto-c 
 	make -C tagger
