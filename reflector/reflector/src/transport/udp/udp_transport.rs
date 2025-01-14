@@ -28,7 +28,7 @@ pub struct UdpTransport {
 
 const BCA: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 3333));
 
-struct Frame(SocketAddr, Bytes);
+struct Frame(SocketAddr, Bytes); // TODO should have protocol agnostic target `hid` instead of socket addr
 
 impl Transport for UdpTransport {
 
@@ -48,11 +48,11 @@ impl Transport for UdpTransport {
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
-        // let (tx, mut rx) = mpsc::channel(512);
+        let (tx, mut rx) = mpsc::channel(512);
 
         let hid = self.hid.clone();
 
-        // tokio::spawn(async move {
+        tokio::spawn(async move {
             
             // let mut msg = lg::Msg::new();
 
@@ -63,54 +63,54 @@ impl Transport for UdpTransport {
 
             let mut buf = Vec::new();
             ip_addr.encode(&mut buf).unwrap();
+            let bytes = Bytes::copy_from_slice(&buf);
 
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 info!("Announcing my presence: {hid}");
-
-                socket.send_to(&buf, BCA).await.unwrap();
                 
-                // tx.send(Frame(BCA, buf.clone()))
-                //     .await
-                //     .expect("Kaboom");
+                // clone on bytes increments an Arc internally
+                tx.send(Frame(BCA, bytes.clone()))
+                    .await
+                    .expect("Kaboom");
             }
-        // });
+        });
         // return Ok(());
 
-        // let mut buf = vec![0; 1024];
-        // // let mut to_send = None;
+        let mut buf = vec![0; 1024];
+        // let mut to_send = None;
 
-        // let notif = self.shutdown_notify.clone();
-        // loop {
-        //     // either receive a packet or receive the shutdown notification
-        //     select! {
-        //         frame = rx.recv() =>{
-        //             match frame{
-        //                 Some(frame) => self.handle_send(frame, &socket).await,
-        //                 None => todo!(),
-        //             }
-        //         }
-        //         rcv = socket.recv_from(&mut buf) =>{
-        //             match rcv{
-        //                 Ok(rcv) =>  self.handle_recv_buffer(rcv, &buf),
-        //                 Err(e) => error!("rcv error: {e}")
-        //             }
-        //         }
-        //         _ = notif.notified() =>{
-        //             warn!("Shutdown notification");
-        //             return Ok(());
-        //         }
-        //     };
+        let notif = self.shutdown_notify.clone();
+        loop {
+            // either receive a packet or receive the shutdown notification
+            select! {
+                frame = rx.recv() =>{
+                    match frame{
+                        Some(frame) => self.handle_send(frame, &socket).await,
+                        None => todo!(),
+                    }
+                }
+                rcv = socket.recv_from(&mut buf) =>{
+                    match rcv{
+                        Ok(rcv) =>  self.handle_recv_buffer(rcv, &buf),
+                        Err(e) => error!("rcv error: {e}")
+                    }
+                }
+                _ = notif.notified() =>{
+                    warn!("Shutdown notification");
+                    return Ok(());
+                }
+            };
 
-        //     // if select is not fair, we might starve the shutdown notifications
-        //     // therefore, the shutting_down boolean is checked after each receive
-        //     if self
-        //         .shutting_down
-        //         .load(std::sync::atomic::Ordering::Relaxed)
-        //     {
-        //         return Ok(());
-        //     }
-        // }
+            // if select is not fair, we might starve the shutdown notifications
+            // therefore, the shutting_down boolean is checked after each receive
+            if self
+                .shutting_down
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                return Ok(());
+            }
+        }
     }
     
     fn send(&self) {
