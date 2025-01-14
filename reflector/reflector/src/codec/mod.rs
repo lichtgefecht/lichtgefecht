@@ -1,3 +1,3 @@
-pub mod lichtgefecht {
-    include!(concat!(env!("OUT_DIR"), "/lichtgefecht.rs"));
+pub mod lg {
+    include!(concat!(env!("OUT_DIR"), "/lg.rs"));
 }

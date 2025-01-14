@@ -19,13 +19,13 @@ project(
     LANGUAGES C)
 
 
-add_executable(codecTest codecTest.c codec.c api/what.pb-c.c ${IDF_PATH}/components/protobuf-c/protobuf-c/protobuf-c/protobuf-c.c)
+add_executable(codecTest codecTest.c codec.c build/api/lg.pb-c.c ${IDF_PATH}/components/protobuf-c/protobuf-c/protobuf-c/protobuf-c.c)
 include_directories(codecTest ${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(codecTest ${IDF_PATH}/components/protobuf-c/protobuf-c)
 
 
 else()
-idf_component_register(SRCS "codec.c" "api/what.pb-c.c"
+idf_component_register(SRCS "codec.c" "build/api/lg.pb-c.c"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES protobuf-c)
 endif(TESTING)

@@ -15,10 +15,6 @@ void app_main(void) {
     selftest("Tagger");
     codec_print();
 
-
-
-
-
     // init_nvs();
     // wifi_init_station();
 
