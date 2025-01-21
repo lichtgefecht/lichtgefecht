@@ -44,7 +44,7 @@ impl Transport for UdpTransport {
     async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
-        let socket = UdpSocket::bind(&"127.0.0.1:3334").await?;
+        let socket = UdpSocket::bind(&"0.0.0.0:3334").await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
@@ -55,7 +55,7 @@ impl Transport for UdpTransport {
         tokio::spawn(async move {
 
             let ip_addr = lg::IpAddr{
-                ip: "localhost".to_string(),
+                ip: "192.168.0.146".to_string(),
                 port: 3333
             };
 

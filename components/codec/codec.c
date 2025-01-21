@@ -8,9 +8,48 @@
 
 static const char* TAG = "codec";
 
+static void codec_print_broadcast(const char* hid, const Lg__Broadcast* broadcast){
+    printf("VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV\n");
+    printf("[%s] Broadcast \n", TAG);
+    printf("[%s]     from hid:             %s\n", TAG, hid);
+    printf("[%s]     transport layer type: %s\n", TAG, lg__transport_layer__descriptor.values[broadcast->transportlayer].name);
+    printf("[%s]     devicetype:           %s\n", TAG, lg__device_type__descriptor.values[broadcast->devicetype].name);
+    printf("[%s]     address: \n", TAG);
+    if(broadcast->reflector_addr_case == LG__BROADCAST__REFLECTOR_ADDR_IP_ADDR){
+        printf("[%s]         ip:               %s\n", TAG, broadcast->ipaddr->ip);
+        printf("[%s]         port:             %ld\n", TAG, broadcast->ipaddr->port);
+    }
+    printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n");
+}
+
+void codec_print_msg(const unsigned char* buf, int len) {
+    
+    Lg__Msg *msg_result = lg__msg__unpack(NULL, len, buf);
+
+    if(msg_result == NULL){
+        // todo
+    }
+
+    char* hid = msg_result->hid;
+
+    Lg__Msg__InnerCase inner_case = msg_result->inner_case;
+    switch(inner_case){
+        case LG__MSG__INNER_BROADCAST:
+            codec_print_broadcast(hid, msg_result->broadcast);
+            break;
+        case LG__MSG__INNER_BROADCAST_REPLY:
+            printf("[%s] Received broadcast reply. NOT IMPLEMENTED\n", TAG);
+            break;
+        case LG__MSG__INNER_TARGET_HIT:
+            printf("[%s] Received target hit\n", TAG);
+            break;
+        default:
+            printf("[%s] Unknown MSG received: %d\n", TAG, inner_case); // tut das?
+            break;
+    }
 
 
-void codec_print() {
+
     // Lg__AMessage msg = LG__AMESSAGE__INIT;
     // Lg__AMessage *msg_result;
 
