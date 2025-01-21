@@ -18,7 +18,7 @@ message TargetHit{
 
 message Broadcast {
   TransportLayer transportLayer = 1;
-  oneof addr {
+  oneof reflectorAddr {
     IpAddr ipAddr = 2;
     FunkAddr funkAddr = 3;
   }
@@ -27,7 +27,7 @@ message Broadcast {
 
 message BroadcastReply {
   TransportLayer transportLayer = 1;
-  oneof addr {
+  oneof clientAddr {
     IpAddr ipAddr = 2;
     FunkAddr funkAddr = 3;
   }

@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc, Notify},
 };
 
-use crate::codec::lg;
+use crate::codec::lg::{self, Msg, msg, Broadcast, TransportLayer, DeviceType, broadcast::ReflectorAddr};
 use prost::Message;
 
 pub struct UdpTransport {
@@ -53,16 +53,25 @@ impl Transport for UdpTransport {
         let hid = self.hid.clone();
 
         tokio::spawn(async move {
-            
-            // let mut msg = lg::Msg::new();
 
             let ip_addr = lg::IpAddr{
                 ip: "localhost".to_string(),
                 port: 3333
             };
 
-            let mut buf = Vec::new();
-            ip_addr.encode(&mut buf).unwrap();
+            let bc = Broadcast{
+                transport_layer: TransportLayer::Ip as i32,
+                device_type: DeviceType::Reflector as i32,
+                reflector_addr: Some(ReflectorAddr::IpAddr(ip_addr)),
+            };
+
+            let msg = Msg{
+                hid: hid.clone(),
+                inner: Some(msg::Inner::Broadcast(bc)),
+            };
+
+            let mut buf = Vec::with_capacity(msg.encoded_len());
+            msg.encode(&mut buf).expect("Kaboom");
             let bytes = Bytes::copy_from_slice(&buf);
 
             loop {
