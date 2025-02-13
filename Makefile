@@ -3,7 +3,6 @@
 all: reflector tagger
 
 reflector: proto-c
-	cd components/codec && cmake -S . -B build -DTESTING=ON && cmake --build build --parallel 24 && ./build/codecTest
 	cd reflector && cargo test && cargo build
 
 tagger: proto-c 
@@ -13,8 +12,7 @@ flash-tagger: tagger
 	make -C tagger flash
 	
 proto-c:
-	mkdir -p components/codec/build/api
-	protoc-c --c_out=components/codec/build/api --proto_path=api lg.proto
+	protoc-c --c_out=components/lg_api --proto_path=api lg.proto
 
 clean:
 	rm -rf components/codec/build

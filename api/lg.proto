@@ -3,7 +3,6 @@ syntax = "proto3";
 package lg;
 
 message Msg {
-
   string hid = 1;
   oneof inner {
     Broadcast broadcast = 2;
@@ -17,21 +16,19 @@ message TargetHit{
 }
 
 message Broadcast {
-  TransportLayer transportLayer = 1;
   oneof reflectorAddr {
-    IpAddr ipAddr = 2;
-    FunkAddr funkAddr = 3;
+    SocketAddr socketAddr = 1;
+    FunkAddr funkAddr = 2;
   }
-  DeviceType deviceType = 4;
+  DeviceType deviceType = 3;
 }
 
 message BroadcastReply {
-  TransportLayer transportLayer = 1;
   oneof clientAddr {
-    IpAddr ipAddr = 2;
-    FunkAddr funkAddr = 3;
+    SocketAddr socketAddr = 1;
+    FunkAddr funkAddr = 2;
   }
-  DeviceType deviceType = 4;
+  DeviceType deviceType = 3;
 }
 
 enum DeviceType {
@@ -39,14 +36,12 @@ enum DeviceType {
   TAGGER = 1;
 }
 
-enum TransportLayer {
-  IP = 0;
-  FUNK = 1;
-}
-
-message IpAddr {
-  string ip = 1;
-  int32 port = 2;
+message SocketAddr {
+  oneof ip {
+    fixed32 v4 =1;
+    bytes v6 = 2;
+  }
+  uint32 port = 3;
 }
 
 message FunkAddr {

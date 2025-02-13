@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc, Notify},
 };
 
-use crate::codec::lg::{self, Msg, msg, Broadcast, TransportLayer, DeviceType, broadcast::ReflectorAddr};
+use crate::codec::lg::{self, Msg, msg, Broadcast, DeviceType, broadcast::ReflectorAddr};
 use prost::Message;
 
 pub struct UdpTransport {
@@ -44,7 +44,7 @@ impl Transport for UdpTransport {
     async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
-        let socket = UdpSocket::bind(&"0.0.0.0:3334").await?;
+        let socket = UdpSocket::bind(&"0.0.0.0:3333").await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
@@ -54,15 +54,14 @@ impl Transport for UdpTransport {
 
         tokio::spawn(async move {
 
-            let ip_addr = lg::IpAddr{
-                ip: "192.168.0.146".to_string(),
+            let socket_addr = lg::SocketAddr{
+                ip: Some(lg::socket_addr::Ip::V4( Ipv4Addr::new(192,168,0,146).into())),
                 port: 3333
             };
 
             let bc = Broadcast{
-                transport_layer: TransportLayer::Ip as i32,
                 device_type: DeviceType::Reflector as i32,
-                reflector_addr: Some(ReflectorAddr::IpAddr(ip_addr)),
+                reflector_addr: Some(ReflectorAddr::SocketAddr(socket_addr)),
             };
 
             let msg = Msg{
@@ -137,12 +136,29 @@ impl Stoppable for UdpTransport {
 }
 
 impl UdpTransport {
-    fn handle_recv_buffer(&self, rcv: (usize, SocketAddr), _buf: &[u8]) {
+    fn handle_recv_buffer(&self, rcv: (usize, SocketAddr), buf: &[u8]) {
         let (size, peer) = rcv;
+
+        let buf = &buf[0..size];
         // if peer.ip() ==  {
         //     info!("Ignoring broadcast")
         // }
-        info!("[{}] rcv {} bytes", peer, size);
+
+        match Msg::decode(buf){
+            Ok(msg) => {
+                match msg.inner{
+                    Some(msg::Inner::Broadcast(_)) => info!("Got own broadcast"),
+                    Some(msg::Inner::BroadcastReply(broadcast_reply)) => warn!("Received broadcast_reply: {broadcast_reply:?}"),
+                    _ => warn!("Received unknown msg or empty inner: {msg:?}")
+                }
+                
+            },
+            Err(e) => {
+                warn!("Invalid msg received: {e}");
+                warn!("buf: {buf:?}");
+            }
+        }
+
         self.core.on_message_received(); // TODO pass in things
     }
     async fn handle_send(&self, frame: Frame, socket: &UdpSocket) {

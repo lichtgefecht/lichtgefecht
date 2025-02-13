@@ -3,6 +3,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <string.h>
+#include <errno.h>
 
 #include "diag.h"
 #include "esp_log.h"
@@ -11,6 +13,7 @@
 #include "freertos/task.h"
 #include "peripherals.h"
 #include "codec.h"
+#include <lg.pb-c.h>
 
 static const char* TAG = "tagger_main";
 
@@ -64,6 +67,15 @@ static void udp_server_task(void *pvParameters) {
 
     ESP_LOGI(TAG, "Listening for UDP packets on port 3333\n");
 
+    // move to another place
+    bool initialized = false;
+    struct sockaddr_in peer_addr;
+    memset(&peer_addr, 0, sizeof(peer_addr));
+    peer_addr.sin_family = AF_INET;
+    peer_addr.sin_port = htons(3333);
+    peer_addr.sin_addr.s_addr = INADDR_ANY;
+
+
     while (1) {
         // Clear the set and add the socket to it
         FD_ZERO(&readfds);
@@ -90,6 +102,40 @@ static void udp_server_task(void *pvParameters) {
 
             // buffer[bytes_received] = '\0';
             codec_print_msg(buffer, bytes_received);
+
+            Lg__Msg* msg;
+            int err;
+            if((err = codec_parse(buffer, bytes_received, &msg)) != 0)
+            {
+                ESP_LOGE(TAG, "Parsing failed with %s\n", strerror(err));
+            }
+            switch (msg->inner_case) {
+                case LG__MSG__INNER_BROADCAST: {
+                    // should go somewhere like handle_broadcast
+                    if(!initialized){
+                        //todo re-enable
+                        // initialized = true;
+                        ESP_LOGI(TAG, "Initializing with received broadcast\n");
+
+                        ConInfoIP cip;
+                        codec_get_con_info_ip_from_bc(msg->broadcast, &cip);
+
+                        peer_addr.sin_port= htons(cip.port);
+                        ESP_LOGI(TAG, "ip is 0x%lx\n", cip.addr);
+                        peer_addr.sin_addr.s_addr = cip.addr;
+
+                        int len = 0;
+                        void* ptr = write_bc_reply(&len);
+                        int err = sendto(sock, ptr, len , 0, (struct sockaddr *)&peer_addr, sizeof(peer_addr));
+                        ESP_LOGI(TAG, "send summary err=%d, len=%d\n", err, len);
+
+                    }
+                    break;
+                }
+                default:
+                    ESP_LOGE(TAG, "inner case not defined: %d\n", msg->inner_case);
+                    break;
+            }
 
             // Null-terminate the received data and print it
             // ESP_LOGI(TAG, "Received: %s\n", buffer);
