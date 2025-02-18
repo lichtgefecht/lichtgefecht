@@ -1,4 +1,3 @@
-
 #[test]
 fn can_decode_own_encoding() {
     // lg::Msg{}

@@ -71,7 +71,7 @@ int codec_get_con_info_ip_from_bc(const Lg__Broadcast* broadcast, ConInfoIP* cip
     return 0;
 }
 
-void* write_bc_reply(int* len){
+int codec_write_bc_reply(uint8_t* bytes, int* len){
     struct Lg__BroadcastReply reply = LG__BROADCAST_REPLY__INIT;
     reply.client_addr_case = LG__BROADCAST_REPLY__CLIENT_ADDR_SOCKET_ADDR;
     struct Lg__SocketAddr sockaddr = LG__SOCKET_ADDR__INIT;
@@ -86,15 +86,8 @@ void* write_bc_reply(int* len){
     msg.hid = "the thing";
     msg.broadcastreply = &reply;
     msg.inner_case=LG__MSG__INNER_BROADCAST_REPLY;
-    int size = lg__msg__get_packed_size(&msg);
-    uint8_t* bytes =  (uint8_t*) calloc(1, size);
+    *len = lg__msg__get_packed_size(&msg);
     lg__msg__pack(&msg, bytes);
 
-    // for (int i = 0; i<size; i++){
-    //     printf("%02x ",(unsigned int)((unsigned char*)bytes)[i]);
-
-    // }
-
-    *len=size;
-    return bytes;
+    return 0;
 }
