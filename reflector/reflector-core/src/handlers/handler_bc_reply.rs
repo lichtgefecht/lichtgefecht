@@ -37,9 +37,10 @@ impl BroadcastReplyHandler {
         let device = Device {
             hid: self.hid.clone(),
             device_type: self.msg.device_type,
-            client_addr,
+            client_addr: client_addr.clone(),
         };
         core.state.devices.insert(self.hid.clone(), device);
+        core.handle.add_address_entry(self.hid.clone(), client_addr);
         Ok(())
     }
 }

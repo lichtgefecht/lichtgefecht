@@ -41,14 +41,19 @@ type CoreDuplex = dyn Duplex<MsgWithTarget, Msg> + Send;
 pub trait Transport: Stoppable {
     // fn new(hid: String, duplex_for_transport: impl Duplex<Msg, MsgWithTarget>) -> Self;
     fn run(&self) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
+}  
+
+pub trait TransportHandle {
+    fn add_address_entry(&self, hid: String, addr: ClientAddr); 
 }
+
 
 pub trait Stoppable {
     fn stop(&self);
 }
 
 pub struct MsgWithTarget{
-    pub target_hid: u32,
+    pub target_hid: String,
     pub msg: Msg
 }
 
@@ -58,6 +63,8 @@ pub struct Core {
     // rx: mpsc::Receiver<Msg>,
     duplex: Box<CoreDuplex>,
     should_stop: Arc<AtomicBool>,
+    handle: Arc<dyn TransportHandle+Send+Sync>
+
 }
 
 fn to_message_handler<'a>(msg: Msg) -> Box<dyn MessageHandler> {
@@ -80,11 +87,15 @@ pub trait MessageHandler {
 }
 
 impl Core {
-    pub fn new(duplex_for_core:impl Duplex<MsgWithTarget, Msg> + 'static + Send) -> Self {
+    pub fn new(
+        duplex_for_core:impl Duplex<MsgWithTarget, Msg> + 'static + Send,
+        handle: Arc<dyn TransportHandle+Send+Sync> 
+) -> Self {
         Core {
             state: State::default(),
             duplex: Box::new(duplex_for_core),
             should_stop: Arc::new(AtomicBool::new(false)),
+            handle
         }
     }
 

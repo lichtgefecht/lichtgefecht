@@ -15,13 +15,13 @@ async fn main() {
 
 
     let (duplex_for_core,duplex_for_transport) = duplex_pair();
+    let transport =  Arc::new(UdpTransport::new("reflector".into(), duplex_for_transport));
 
-    let mut core = Core::new(duplex_for_core);
+    let mut core = Core::new(duplex_for_core, transport.clone());
     let core_hook = core.get_shutdown_hook();
 
     let core_thread = std::thread::spawn(move || core.run() );    
 
-    let transport =  Arc::new(UdpTransport::new("reflector".into(), duplex_for_transport));
 
     add_int_hooks(vec![core_hook, transport.clone()]);
 
