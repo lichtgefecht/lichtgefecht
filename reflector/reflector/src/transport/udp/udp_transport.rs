@@ -109,13 +109,14 @@ impl UdpTransport {
             .send_to(&buf, addr)
             .await
             .map_err(|e| warn!("Send err: {e}"))?;
-        Ok(debug!("sent {result} bytes"))
+        debug!("sent {result} bytes");
+        Ok(())
     }
 
     async fn handle_shutdown_notification(&self) -> Result<(), ()> {
-        Ok(self
-            .shutting_down
-            .store(true, std::sync::atomic::Ordering::Relaxed))
+        self.shutting_down
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
     }
 
     async fn crack_duplex(&self) -> (mpsc::Sender<Msg>, mpsc::Receiver<MsgWithTarget>) {
@@ -152,24 +153,19 @@ fn forward_messages_to_transport(
     transport_mapping: TransportMap,
 ) {
     tokio::spawn(async move {
-        loop {
-            match receiver.recv().await {
-                Some(msg) => {
-                    let mut buf = Vec::with_capacity(msg.msg.encoded_len());
-                    msg.msg.encode(&mut buf).expect("Kaboom");
-                    if let Some(addr) = transport_mapping.read().await.get(&msg.target_hid) {
-                        let frame = Frame(addr.clone(), Bytes::copy_from_slice(&buf));
-                        match sender.send(frame).await {
-                            Ok(_) => {
-                                debug!("Forwarded message to transport MsgWithTarget -> Frame")
-                            }
-                            Err(_e) => warn!("Failed to send to udp transport"),
-                        }
-                    } else {
-                        warn!("Ignoring send command to unknown hid: {}", msg.target_hid)
+        while let Some(msg) = receiver.recv().await {
+            let mut buf = Vec::with_capacity(msg.msg.encoded_len());
+            msg.msg.encode(&mut buf).expect("Kaboom");
+            if let Some(addr) = transport_mapping.read().await.get(&msg.target_hid) {
+                let frame = Frame(*addr, Bytes::copy_from_slice(&buf));
+                match sender.send(frame).await {
+                    Ok(_) => {
+                        debug!("Forwarded message to transport MsgWithTarget -> Frame")
                     }
+                    Err(_e) => warn!("Failed to send to udp transport"),
                 }
-                None => break,
+            } else {
+                warn!("Ignoring send command to unknown hid: {}", msg.target_hid)
             }
         }
         warn!("forward_messages_to_transport task exiting")
@@ -185,7 +181,7 @@ fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: Ipv4Addr, port
         info!("Will announce my presence: {hid}");
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            if let Err(r) = tx.send(Frame(BCA, bytes.clone())).await {
+            if tx.send(Frame(BCA, bytes.clone())).await.is_err() {
                 info!("Broadcast channel closed");
                 return;
             }
@@ -193,7 +189,7 @@ fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: Ipv4Addr, port
     });
 }
 
-fn get_bc_message(hid: &String, ip: Ipv4Addr, port: u32) -> Msg {
+fn get_bc_message(hid: &str, ip: Ipv4Addr, port: u32) -> Msg {
     let socket_addr = lg::SocketAddr {
         ip: Some(lg::socket_addr::Ip::V4(ip.into())),
         port,
@@ -204,11 +200,10 @@ fn get_bc_message(hid: &String, ip: Ipv4Addr, port: u32) -> Msg {
         reflector_addr: Some(ReflectorAddr::SocketAddr(socket_addr)),
     };
 
-    let msg = Msg {
-        hid: hid.clone(),
+    Msg {
+        hid: hid.to_owned(),
         inner: Some(msg::Inner::Broadcast(bc)),
-    };
-    msg
+    }
 }
 
 impl Stoppable for UdpTransport {

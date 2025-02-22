@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use env_logger::Env;
 use log::{error, info};
-use reflector;
 use reflector::{tokio_tools::duplex_pair, transport::UdpTransport};
 use reflector_core::Core;
 use reflector_core::{Stoppable, Transport};

@@ -2,7 +2,7 @@ use reflector_api::lg::{msg::Inner, Msg};
 
 use crate::{handlers::*, MessageHandler};
 
-pub fn to_message_handler<'a>(msg: Msg) -> Box<dyn MessageHandler> {
+pub fn to_message_handler(msg: Msg) -> Box<dyn MessageHandler> {
     match msg {
         Msg {
             inner: Some(Inner::Broadcast(_)),
