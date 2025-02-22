@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{debug, warn};
 use reflector_api::lg::BroadcastReply;
 
 use crate::{Core, Device, MessageHandler};

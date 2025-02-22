@@ -1,11 +1,10 @@
-use std::os::unix::thread;
 use std::sync::Arc;
 
 use env_logger::Env;
 use log::{error, info};
 use reflector;
 use reflector::{transport::UdpTransport, duplex_pair};
-use reflector_core::{Duplex, MsgWithTarget, Stoppable, Transport};
+use reflector_core::{Stoppable, Transport};
 use reflector_core::Core;
 use tokio::signal;
 

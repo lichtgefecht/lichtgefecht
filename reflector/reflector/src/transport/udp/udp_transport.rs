@@ -1,11 +1,10 @@
 use std::{
-    cell::RefCell, collections::HashMap, error::Error, net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4}, sync::{atomic::AtomicBool, Arc}, time::Duration
+    collections::HashMap, error::Error, net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4}, sync::{atomic::AtomicBool, Arc}, time::Duration
 };
 
 use reflector_core::{MsgWithTarget, Stoppable, Transport, TransportHandle};
 use bytes::Bytes;
-use log::{debug, error, info, warn};
-use reflector_core::Core;
+use log::{error, info, warn};
 use tokio::{
     net::UdpSocket,
     select,
@@ -15,7 +14,7 @@ use tokio::{
 use prost::Message;
 use reflector_api::lg::{self, broadcast::ReflectorAddr, msg, socket_addr::Ip, Broadcast, DeviceType, Msg};
 
-use crate::{transport, TokioDuplex};
+use crate::TokioDuplex;
 
 pub struct UdpTransport {
     hid: String,

@@ -1,8 +1,8 @@
 use handlers::{BroadcastReplyHandler, IgnoredMessageHandler, UnimplementedMessageHandler};
 use reflector_api::lg::{
-    self, broadcast::ReflectorAddr, broadcast_reply::ClientAddr, msg, Broadcast, DeviceType, Msg,
+    broadcast_reply::ClientAddr, msg, Msg,
 };
-use std::sync::mpsc::{self, RecvError, SendError};
+use std::sync::mpsc::{RecvError, SendError};
 use std::{collections::HashMap, error::Error, fmt::Debug, future::Future, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 
 use log::{info, warn};
