@@ -4,8 +4,8 @@ use std::sync::Arc;
 use env_logger::Env;
 use log::{error, info};
 use reflector;
-use reflector::transport::UdpTransport;
-use reflector_core::{Stoppable, Transport};
+use reflector::{transport::UdpTransport, duplex_pair};
+use reflector_core::{Duplex, MsgWithTarget, Stoppable, Transport};
 use reflector_core::Core;
 use tokio::signal;
 
@@ -14,31 +14,31 @@ async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
 
+    let (duplex_for_core,duplex_for_transport) = duplex_pair();
 
-    let (ctt_tx,ctt_rx) = tokio::sync::mpsc::channel(512);
-    let (ttc_tx,ttc_rx) = tokio::sync::mpsc::channel(512);
+    let mut core = Core::new(duplex_for_core);
+    let core_hook = core.get_shutdown_hook();
 
-    let mut core = Core::new(ctt_tx, ttc_rx);
+    let core_thread = std::thread::spawn(move || core.run() );    
 
-    std::thread::spawn(move || {
-        core.run();
-    });    
+    let transport =  Arc::new(UdpTransport::new("reflector".into(), duplex_for_transport));
 
-    let transport = UdpTransport::new("reflector".into(), ttc_tx);
-    let transport = Arc::new(transport);
+    add_int_hooks(vec![core_hook, transport.clone()]);
 
-    add_int_hook(transport.clone());
-    let _ = transport.run(ctt_rx).await;
+    let _ = transport.run().await;
+    core_thread.join().unwrap();
 }
 
-fn add_int_hook(tc: Arc<dyn Stoppable + Send + Sync>) {
+fn add_int_hooks(hooks: Vec<Arc<dyn Stoppable + Send + Sync>>) {
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(_) => {
                 info!("Received ctrl_c, shutting down reflector");
-                tc.stop();
+                hooks.iter()
+                    .for_each(|hook| hook.stop());            
             }
             Err(e) => error!("Error waiting for ctrl_c: {}", e),
         }
     });
 }
+

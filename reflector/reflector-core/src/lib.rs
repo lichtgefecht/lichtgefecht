@@ -2,8 +2,8 @@ use handlers::{BroadcastReplyHandler, IgnoredMessageHandler, UnimplementedMessag
 use reflector_api::lg::{
     self, broadcast::ReflectorAddr, broadcast_reply::ClientAddr, msg, Broadcast, DeviceType, Msg,
 };
-use tokio::sync::mpsc;
-use std::{collections::HashMap, error::Error, fmt::Debug, future::Future};
+use std::sync::mpsc::{self, RecvError, SendError};
+use std::{collections::HashMap, error::Error, fmt::Debug, future::Future, sync::{atomic::{AtomicBool, Ordering}, Arc}};
 
 use log::{info, warn};
 
@@ -29,22 +29,35 @@ pub struct State {
     devices: HashMap<String, Device>,
 }
 
+
+pub trait Duplex<T,R> {
+    fn send(&self, t: T) -> Result<(), SendError<T>> ; 
+    fn recv(&mut self) -> Result<R, RecvError>;
+
+}
+
+type CoreDuplex = dyn Duplex<MsgWithTarget, Msg> + Send;
+
 pub trait Transport: Stoppable {
-    fn new(hid: String, rcv_to_core: mpsc::Sender<Msg>) -> Self;
-    fn run(&self, core_to_send: mpsc::Receiver<Envelope>) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-    fn send(&self);
+    // fn new(hid: String, duplex_for_transport: impl Duplex<Msg, MsgWithTarget>) -> Self;
+    fn run(&self) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
 }
 
 pub trait Stoppable {
     fn stop(&self);
 }
 
-pub struct Envelope(pub String, pub Msg);
+pub struct MsgWithTarget{
+    pub target_hid: u32,
+    pub msg: Msg
+}
 
 pub struct Core {
     state: State,
-    tx: mpsc::Sender<Envelope>,
-    rx: mpsc::Receiver<Msg>,
+    // tx: mpsc::Sender<MsgWithTarget>,
+    // rx: mpsc::Receiver<Msg>,
+    duplex: Box<CoreDuplex>,
+    should_stop: Arc<AtomicBool>,
 }
 
 fn to_message_handler<'a>(msg: Msg) -> Box<dyn MessageHandler> {
@@ -67,16 +80,38 @@ pub trait MessageHandler {
 }
 
 impl Core {
-    pub fn new(tx: mpsc::Sender<Envelope>, rx: mpsc::Receiver<Msg>) -> Self {
+    pub fn new(duplex_for_core:impl Duplex<MsgWithTarget, Msg> + 'static + Send) -> Self {
         Core {
             state: State::default(),
-            tx,
-            rx
+            duplex: Box::new(duplex_for_core),
+            should_stop: Arc::new(AtomicBool::new(false)),
         }
     }
+
+    pub fn get_shutdown_hook(&self) -> Arc<CoreShutdownHook>{
+        Arc::new(CoreShutdownHook{should_stop: self.should_stop.clone()})
+    }
+
     pub fn run(&mut self) {
-       let msg = self.rx.blocking_recv().unwrap();
-       self.on_message_received(msg);
+        loop {
+            match self.duplex.recv() {
+                Ok(msg) => {
+                    self.on_message_received(msg);
+                },
+                Err(e) => {
+                    if self.should_stop.load(Ordering::Relaxed){
+                        info!("Core channel hung up, shutting down");
+                        return;
+                    }
+                    else {
+                        warn!("Core channel hung up without clean shutdown");
+                        return;
+                    }
+                },
+            }
+            
+        }
+
     }
 
     pub fn on_message_received(&mut self, msg: Msg) {
@@ -86,5 +121,14 @@ impl Core {
     pub fn shutdown(&mut self) {
         info!("Shutting down core");
         info!("Registered clients: {:?}", self.state.devices);
+    }
+}
+
+pub struct CoreShutdownHook{
+    should_stop: Arc<AtomicBool>
+}
+impl Stoppable for CoreShutdownHook {
+    fn stop(&self) {
+        self.should_stop.store(true, Ordering::Relaxed);
     }
 }

@@ -2,24 +2,26 @@ use std::{
     cell::RefCell, collections::HashMap, error::Error, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, sync::{atomic::AtomicBool, Arc}, time::Duration
 };
 
-use reflector_core::{Envelope, Stoppable, Transport};
+use reflector_core::{MsgWithTarget, Stoppable, Transport};
 use bytes::Bytes;
 use log::{debug, error, info, warn};
 use reflector_core::Core;
 use tokio::{
     net::UdpSocket,
     select,
-    sync::{mpsc, Notify, RwLock},
+    sync::{mpsc, Mutex, Notify, RwLock},
 };
 
 use prost::Message;
 use reflector_api::lg::{self, broadcast::ReflectorAddr, msg, Broadcast, DeviceType, Msg};
 
+use crate::TokioDuplex;
+
 pub struct UdpTransport {
     hid: String,
     shutdown_notify: Arc<Notify>,
     shutting_down: AtomicBool,
-    rcv_to_core: mpsc::Sender<Msg>,
+    duplex: Mutex<Option<TokioDuplex<Msg, MsgWithTarget>>>,
     transport_mapping: RwLock<HashMap<u32, u32>>,
 }
 
@@ -28,28 +30,22 @@ const BCA: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(255, 255,
 struct Frame(SocketAddr, Bytes); // TODO should have protocol agnostic target `hid` instead of socket addr
 
 impl Transport for UdpTransport {
-    fn new(hid: String, rcv_to_core: mpsc::Sender<Msg>) -> Self {
-        UdpTransport {
-            shutdown_notify: Arc::new(Notify::new()),
-            shutting_down: AtomicBool::new(false),
-            rcv_to_core,
-            hid,
-            transport_mapping: RwLock::new(HashMap::new())
-        }
-    }
-
-    async fn run(&self,  core_to_send: mpsc::Receiver<Envelope>) -> Result<(), Box<dyn Error>> {
+    async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
         let socket = UdpSocket::bind(&"0.0.0.0:3333").await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
-        let (tx, mut rx) = mpsc::channel(512);
+        let (snd_tx, mut snd_rx) = mpsc::channel(512);
+        let (rcv_tx, mut rcv_rx) = mpsc::channel(512);
 
-        spawn_broadcast_task(tx.clone(), self.hid.clone(), Ipv4Addr::new(192, 168, 0, 146), 3333);
+        spawn_broadcast_task(snd_tx.clone(), self.hid.clone(), Ipv4Addr::new(192, 168, 0, 146), 3333);
 
-        spawn_core_send_task(tx.clone(), core_to_send);
+        let duplex = self.duplex.lock().await.take().unwrap();
+        let (ctx, crx) = duplex.crack();
+        forward_messages_to_transport(snd_tx.clone(), crx);
+        forward_messages_to_core(ctx, rcv_rx );
 
         let mut receive_buffer = vec![0; 1024];
 
@@ -57,7 +53,7 @@ impl Transport for UdpTransport {
         loop {
             // either receive a packet or receive the shutdown notification
             select! {
-                frame = rx.recv() =>{
+                frame = snd_rx.recv() =>{
                     match frame{
                         Some(frame) => self.handle_send(frame, &socket).await,
                         None => todo!(),
@@ -65,7 +61,7 @@ impl Transport for UdpTransport {
                 }
                 rcv = socket.recv_from(&mut receive_buffer) =>{
                     match rcv{
-                        Ok(rcv) =>  self.handle_recv_buffer(rcv, &receive_buffer).await,
+                        Ok(rcv) =>  self.handle_recv_buffer(&rcv_tx, rcv, &receive_buffer).await,
                         Err(e) => error!("rcv error: {e}")
                     }
                 }
@@ -81,27 +77,48 @@ impl Transport for UdpTransport {
                 .shutting_down
                 .load(std::sync::atomic::Ordering::Relaxed)
             {
-                // self.core.write().await.shutdown();
-                // self.
                 return Ok(());
             }
         }
     }
 
-    fn send(&self) {
-        todo!()
-    }
 }
 
-fn spawn_core_send_task(sender: mpsc::Sender<Frame>, mut receiver: mpsc::Receiver<Envelope>) {
+fn forward_messages_to_transport(sender: mpsc::Sender<Frame>, mut receiver: mpsc::Receiver<MsgWithTarget>) {
     tokio::spawn(async move {
-        let res = receiver.recv().await.expect("Kaboom");
-        let mut buf = Vec::with_capacity(res.1.encoded_len());
-        res.1.encode(&mut buf).expect("Kaboom");
-        let frame = Frame(BCA, Bytes::copy_from_slice(&buf));
-        //todo: mapping from hid to udp addr
-        sender.send(frame).await.expect("Kaboom");
-        todo!()
+        loop {
+            match receiver.recv().await {
+                Some(res) => {
+                    let mut buf = Vec::with_capacity(res.msg.encoded_len());
+                    res.msg.encode(&mut buf).expect("Kaboom");
+                    let frame = Frame(BCA, Bytes::copy_from_slice(&buf));
+                    //todo: mapping from hid to udp addr
+                    match sender.send(frame).await {
+                        Ok(_) => (),
+                        Err(_e) => {
+                            warn!("Failed to send to udp transport");
+                        },
+                    }      
+                    info!("Forwarded message to transport MsgWithTarget -> Frame")
+                },
+                None => break,
+            } 
+        }
+
+    });
+}
+fn forward_messages_to_core(sender: mpsc::Sender<Msg>, mut receiver: mpsc::Receiver<Msg>) {
+    tokio::spawn(async move {
+        loop {
+            match receiver.recv().await {
+                Some(res) => {
+                    sender.send(res).await.unwrap()
+                },
+                None => break,
+            } 
+            info!("Forwarded message to core Msg -> Msg")
+        }
+
     });
 }
 
@@ -129,7 +146,13 @@ fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: Ipv4Addr, port
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             // clone on bytes only increments an Arc internally
-            tx.send(Frame(BCA, bytes.clone())).await.expect("Kaboom");
+            match tx.send(Frame(BCA, bytes.clone())).await {
+                Ok(_) => (),
+                Err(_e) => {
+                    info!("Broadcast channel closed");
+                    return;
+                },
+            }
         }
     });
 }
@@ -144,7 +167,19 @@ impl Stoppable for UdpTransport {
 }
 
 impl UdpTransport {
-    async fn handle_recv_buffer(&self, rcv: (usize, SocketAddr), buf: &[u8]) {
+
+    pub fn new(hid: String, duplex: TokioDuplex<Msg, MsgWithTarget>) -> Self {
+        UdpTransport {
+            shutdown_notify: Arc::new(Notify::new()),
+            shutting_down: AtomicBool::new(false),
+            duplex: Mutex::new(Some(duplex)),
+            hid,
+            transport_mapping: RwLock::new(HashMap::new())
+        }
+    }
+
+
+    async fn handle_recv_buffer(&self, tx: &mpsc::Sender<Msg>, rcv: (usize, SocketAddr), buf: &[u8]) {
         let (size, _peer) = rcv;
 
         let buf = &buf[0..size];
@@ -152,7 +187,13 @@ impl UdpTransport {
 
         match Msg::decode(buf) {
             Ok(msg) => {
-                self.rcv_to_core.send(msg).await.expect("Kaboom");
+                match tx.send(msg).await{
+                    Ok(_) => (),
+                    Err(_) => {
+                        info!("rcv_to_core channel closed");
+                        return;
+                    },
+                }
                 // core.on_message_received(msg);
             }
             Err(e) => {
@@ -164,8 +205,27 @@ impl UdpTransport {
 
     async fn handle_send(&self, frame: Frame, socket: &UdpSocket) {
         match socket.send_to(&frame.1, frame.0).await {
-            Ok(result) => debug!("sent {result} bytes"),
+            Ok(result) => info!("sent {result} bytes"),
             Err(e) => error!("Send error: {e}"),
         }
+    }
+}
+
+struct TokioDuplexPairForTransport{
+    tx: tokio::sync::mpsc::Sender<Msg>,
+    rx: tokio::sync::mpsc::Receiver<MsgWithTarget>,
+}
+struct TokioDuplexPairForTransportTransciever{
+    ttx: tokio::sync::mpsc::Sender<MsgWithTarget>,
+    trx: tokio::sync::mpsc::Receiver<Msg>,
+
+    stx: std::sync::mpsc::Sender<Msg>,
+    srx: std::sync::mpsc::Receiver<MsgWithTarget>,
+}
+
+fn switchboard() -> TokioDuplexPairForTransport{
+    TokioDuplexPairForTransport {
+        tx: tokio::sync::mpsc::channel(1024).0,
+        rx: tokio::sync::mpsc::channel(1024).1,
     }
 }
