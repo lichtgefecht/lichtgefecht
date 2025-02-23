@@ -1,7 +1,8 @@
 use std::sync::mpsc::{RecvError, SendError};
 
 use reflector_api::lg::Msg;
-use reflector_core::{Duplex, MsgWithTarget};
+
+use reflector_core::api::transport::{Duplex, MsgWithTarget};
 
 pub fn duplex_pair() -> (
     TokioDuplex<MsgWithTarget, Msg>,

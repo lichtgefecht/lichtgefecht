@@ -1,6 +1,6 @@
 use reflector_api::lg::{msg::Inner, Msg};
 
-use crate::{handlers::*, MessageHandler};
+use crate::handlers::*;
 
 pub fn to_message_handler(msg: Msg) -> Box<dyn MessageHandler> {
     match msg {

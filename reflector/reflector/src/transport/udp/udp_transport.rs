@@ -8,7 +8,7 @@ use std::{
 
 use bytes::Bytes;
 use log::{debug, error, info, warn};
-use reflector_core::{MsgWithTarget, Stoppable, Transport, TransportHandle};
+use reflector_core::api::{infra::Stoppable, transport::{MsgWithTarget, Transport, TransportHandle}};
 use tokio::{
     net::UdpSocket,
     select,

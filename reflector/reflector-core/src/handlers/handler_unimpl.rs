@@ -1,6 +1,8 @@
 use log::warn;
 
-use crate::{Core, MessageHandler};
+use crate::Core;
+
+use super::MessageHandler;
 
 pub struct UnimplementedMessageHandler {
     msg: String,

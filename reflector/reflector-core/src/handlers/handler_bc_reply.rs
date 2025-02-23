@@ -1,7 +1,9 @@
 use log::{debug, warn};
 use reflector_api::lg::BroadcastReply;
 
-use crate::{Core, Device, MessageHandler};
+use crate::{game::state::Device, Core};
+
+use super::MessageHandler;
 
 pub struct BroadcastReplyHandler {
     msg: BroadcastReply,
@@ -37,7 +39,6 @@ impl BroadcastReplyHandler {
         let device = Device {
             hid: self.hid.clone(),
             device_type: self.msg.device_type,
-            client_addr: client_addr.clone(),
         };
         core.state.devices.insert(self.hid.clone(), device);
         core.handle.add_address_entry(self.hid.clone(), client_addr);

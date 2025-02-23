@@ -3,8 +3,7 @@ use std::sync::Arc;
 use env_logger::Env;
 use log::{error, info};
 use reflector::{tokio_tools::duplex_pair, transport::UdpTransport};
-use reflector_core::Core;
-use reflector_core::{Stoppable, Transport};
+use reflector_core::{api::infra::Stoppable, Core, api::transport::Transport};
 use tokio::signal;
 
 #[tokio::main]
@@ -19,13 +18,13 @@ async fn main() {
 
     let core_thread = std::thread::spawn(move || core.run());
 
-    add_int_hooks(vec![core_hook, transport.clone()]);
+    add_shutdown_hooks(vec![core_hook, transport.clone()]);
 
     let _ = transport.run().await;
     core_thread.join().unwrap();
 }
 
-fn add_int_hooks(hooks: Vec<Arc<dyn Stoppable + Send + Sync>>) {
+fn add_shutdown_hooks(hooks: Vec<Arc<dyn Stoppable + Send + Sync>>) {
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(_) => {
