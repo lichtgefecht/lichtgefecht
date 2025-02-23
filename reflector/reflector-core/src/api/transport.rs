@@ -1,17 +1,10 @@
 use reflector_api::lg::{broadcast_reply::ClientAddr, Msg};
 use std::sync::mpsc::{RecvError, SendError};
 use std::{
-    collections::HashMap,
     error::Error,
-    fmt::Debug,
     future::Future,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
 };
 
-use log::{info, warn};
 
 use super::infra::Stoppable;
 
