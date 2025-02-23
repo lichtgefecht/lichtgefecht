@@ -1,0 +1,3 @@
+[transport]
+hid = "reflector"
+bind_addr = { ip="192.168.0.146", port = 3333}

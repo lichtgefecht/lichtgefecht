@@ -20,14 +20,15 @@ use reflector_api::lg::{
     self, broadcast::ReflectorAddr, msg, socket_addr::Ip, Broadcast, DeviceType, Msg,
 };
 
-use crate::tokio_tools::TokioDuplex;
+use crate::{config::TransportConfig, tokio_tools::TokioDuplex};
 
 pub struct UdpTransport {
-    hid: String,
+    config: TransportConfig,
     shutdown_notify: Arc<Notify>,
     shutting_down: AtomicBool,
     duplex: Mutex<Option<TokioDuplex<Msg, MsgWithTarget>>>,
     transport_mapping: TransportMap,
+    observed_transport_mapping: TransportMap,
 }
 
 const BCA: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 3333));
@@ -38,7 +39,15 @@ impl Transport for UdpTransport {
     async fn run(&self) -> Result<(), Box<dyn Error>> {
         info!("Starting UdpTransport");
 
-        let socket = UdpSocket::bind(&"0.0.0.0:3333").await?;
+        // setup all the things
+
+        let bind_addr = self.config.bind_addr.ip.parse()?;
+        let bind_port = self.config.bind_addr.port;
+
+        let advertise_addr = self.config.advertise_addr.as_ref().map_or_else( || Ok(bind_addr), |a| a.ip.parse::<IpAddr>() )?;
+        let advertise_port =  self.config.advertise_addr.as_ref().map_or_else(|| bind_port, |a| a.port );
+
+        let socket = UdpSocket::bind( SocketAddr::new(bind_addr, bind_port)).await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
@@ -47,16 +56,21 @@ impl Transport for UdpTransport {
 
         let notif = self.shutdown_notify.clone();
 
+
+        // spawn jobs into tokio
+
         spawn_broadcast_task(
             snd_tx.clone(),
-            self.hid.clone(),
-            Ipv4Addr::new(192, 168, 0, 146),
-            3333,
+            self.config.hid.clone(),
+            advertise_addr,
+            advertise_port as u32,
         );
         forward_messages_to_transport(snd_tx.clone(), core_rx, self.transport_mapping.clone());
 
-        let mut receive_buffer = vec![0; 1024];
 
+        // the main event loop
+
+        let mut receive_buffer = vec![0; 1024];
         loop {
             // either receive a packet, send one or receive the shutdown notification
             let _ = select! {
@@ -66,7 +80,7 @@ impl Transport for UdpTransport {
             };
 
             // if select is not fair, we might starve the shutdown notifications
-            // therefore, the shutting_down boolean is checked after each receive
+            // therefore, the shutting_down boolean is checked after each receive/send/notification
             if self
                 .shutting_down
                 .load(std::sync::atomic::Ordering::Relaxed)
@@ -79,13 +93,14 @@ impl Transport for UdpTransport {
 }
 
 impl UdpTransport {
-    pub fn new(hid: String, duplex: TokioDuplex<Msg, MsgWithTarget>) -> Self {
+    pub fn new(config: TransportConfig, duplex: TokioDuplex<Msg, MsgWithTarget>) -> Self {
         UdpTransport {
             shutdown_notify: Arc::new(Notify::new()),
             shutting_down: AtomicBool::new(false),
             duplex: Mutex::new(Some(duplex)),
-            hid,
+            config,
             transport_mapping: Arc::new(RwLock::new(HashMap::new())),
+            observed_transport_mapping: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -95,9 +110,12 @@ impl UdpTransport {
         rcv: Result<(usize, SocketAddr), std::io::Error>,
         buf: &[u8],
     ) -> Result<(), ()> {
-        let (size, _peer) = rcv.map_err(|_| ())?;
+        let (size, peer) = rcv.map_err(|_| ())?;
         let buf = &buf[0..size];
         let msg = Msg::decode(buf).map_err(|e| warn!("Decoding error: {e}, {buf:?}"))?;
+
+        //TODO rate limit to avoid DOS
+        self.observed_transport_mapping.write().await.insert(msg.hid.clone(), peer);
         tx.send(msg)
             .await
             .map_err(|_| warn!("rcv_to_core channel closed"))
@@ -128,9 +146,9 @@ impl UdpTransport {
 
 impl TransportHandle for UdpTransport {
     fn add_address_entry(&self, hid: String, addr: lg::broadcast_reply::ClientAddr) {
-        match addr {
+        let mut addr = match addr {
             lg::broadcast_reply::ClientAddr::SocketAddr(socket_addr) => {
-                let addr = match socket_addr.ip {
+                 match socket_addr.ip {
                     Some(Ip::V4(ip)) => SocketAddr::new(
                         IpAddr::V4(Ipv4Addr::from_bits(ip)),
                         socket_addr.port as u16,
@@ -139,11 +157,21 @@ impl TransportHandle for UdpTransport {
                         SocketAddr::new(IpAddr::V6(Ipv6Addr::from_bits(0)), socket_addr.port as u16)
                     }
                     None => todo!(),
-                };
-                self.transport_mapping.blocking_write().insert(hid, addr);
+                }
             }
-            _ => error!("UdpTransport does not support address types other than SocketAddr"),
+            _ => {
+                error!("UdpTransport does not support address types other than SocketAddr");
+                panic!("Not yet implemented");
+            },
+        };
+        if let Some(observed_addr) = self.observed_transport_mapping.blocking_read().get(&hid) {
+            if addr != *observed_addr{
+                warn!("Possible NAT situation detected: observed {observed_addr} != reported {addr}. Will rewrite to {observed_addr} ");
+                addr = *observed_addr;
+            }
         }
+        self.transport_mapping.blocking_write().insert(hid, addr);
+
     }
 }
 
@@ -172,7 +200,7 @@ fn forward_messages_to_transport(
     });
 }
 
-fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: Ipv4Addr, port: u32) {
+fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: IpAddr, port: u32) {
     tokio::spawn(async move {
         let msg = get_bc_message(&hid, ip, port);
         let mut buf = Vec::with_capacity(msg.encoded_len());
@@ -189,9 +217,15 @@ fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: Ipv4Addr, port
     });
 }
 
-fn get_bc_message(hid: &str, ip: Ipv4Addr, port: u32) -> Msg {
+fn get_bc_message(hid: &str, ip: IpAddr, port: u32) -> Msg {
+
+    let addr = match ip{
+        IpAddr::V4(ipv4_addr) => lg::socket_addr::Ip::V4(ipv4_addr.into()),
+        IpAddr::V6(_ipv6_addr) => todo!(),
+    };
+
     let socket_addr = lg::SocketAddr {
-        ip: Some(lg::socket_addr::Ip::V4(ip.into())),
+        ip: Some(addr),
         port,
     };
 

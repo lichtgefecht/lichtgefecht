@@ -16,6 +16,8 @@ futures = "0.3.31"
 bytes = "1.9.0"
 prost = "0.13.4"
 prost-types = "0.13.4"
+toml = "0.8.20"
+serde = { version = "1.0.218", features = ["derive"] }
 
 [build-dependencies]
 prost-build = "0.13.4"
