@@ -8,7 +8,10 @@ use std::{
 
 use bytes::Bytes;
 use log::{debug, error, info, warn};
-use reflector_core::api::{infra::Stoppable, transport::{MsgWithTarget, Transport, TransportHandle}};
+use reflector_core::api::{
+    infra::Stoppable,
+    transport::{MsgWithTarget, Transport, TransportHandle},
+};
 use tokio::{
     net::UdpSocket,
     select,
@@ -44,10 +47,18 @@ impl Transport for UdpTransport {
         let bind_addr = self.config.bind_addr.ip.parse()?;
         let bind_port = self.config.bind_addr.port;
 
-        let advertise_addr = self.config.advertise_addr.as_ref().map_or_else( || Ok(bind_addr), |a| a.ip.parse::<IpAddr>() )?;
-        let advertise_port =  self.config.advertise_addr.as_ref().map_or_else(|| bind_port, |a| a.port );
+        let advertise_addr = self
+            .config
+            .advertise_addr
+            .as_ref()
+            .map_or_else(|| Ok(bind_addr), |a| a.ip.parse::<IpAddr>())?;
+        let advertise_port = self
+            .config
+            .advertise_addr
+            .as_ref()
+            .map_or_else(|| bind_port, |a| a.port);
 
-        let socket = UdpSocket::bind( SocketAddr::new(bind_addr, bind_port)).await?;
+        let socket = UdpSocket::bind(SocketAddr::new(bind_addr, bind_port)).await?;
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
@@ -55,7 +66,6 @@ impl Transport for UdpTransport {
         let (core_tx, core_rx) = self.crack_duplex().await;
 
         let notif = self.shutdown_notify.clone();
-
 
         // spawn jobs into tokio
 
@@ -66,7 +76,6 @@ impl Transport for UdpTransport {
             advertise_port as u32,
         );
         forward_messages_to_transport(snd_tx.clone(), core_rx, self.transport_mapping.clone());
-
 
         // the main event loop
 
@@ -115,7 +124,10 @@ impl UdpTransport {
         let msg = Msg::decode(buf).map_err(|e| warn!("Decoding error: {e}, {buf:?}"))?;
 
         //TODO rate limit to avoid DOS
-        self.observed_transport_mapping.write().await.insert(msg.hid.clone(), peer);
+        self.observed_transport_mapping
+            .write()
+            .await
+            .insert(msg.hid.clone(), peer);
         tx.send(msg)
             .await
             .map_err(|_| warn!("rcv_to_core channel closed"))
@@ -147,31 +159,27 @@ impl UdpTransport {
 impl TransportHandle for UdpTransport {
     fn add_address_entry(&self, hid: String, addr: lg::broadcast_reply::ClientAddr) {
         let mut addr = match addr {
-            lg::broadcast_reply::ClientAddr::SocketAddr(socket_addr) => {
-                 match socket_addr.ip {
-                    Some(Ip::V4(ip)) => SocketAddr::new(
-                        IpAddr::V4(Ipv4Addr::from_bits(ip)),
-                        socket_addr.port as u16,
-                    ),
-                    Some(Ip::V6(_)) => {
-                        SocketAddr::new(IpAddr::V6(Ipv6Addr::from_bits(0)), socket_addr.port as u16)
-                    }
-                    None => todo!(),
+            lg::broadcast_reply::ClientAddr::SocketAddr(socket_addr) => match socket_addr.ip {
+                Some(Ip::V4(ip)) => {
+                    SocketAddr::new(IpAddr::V4(Ipv4Addr::from_bits(ip)), socket_addr.port as u16)
                 }
-            }
+                Some(Ip::V6(_)) => {
+                    SocketAddr::new(IpAddr::V6(Ipv6Addr::from_bits(0)), socket_addr.port as u16)
+                }
+                None => todo!(),
+            },
             _ => {
                 error!("UdpTransport does not support address types other than SocketAddr");
                 panic!("Not yet implemented");
-            },
+            }
         };
         if let Some(observed_addr) = self.observed_transport_mapping.blocking_read().get(&hid) {
-            if addr != *observed_addr{
+            if addr != *observed_addr {
                 warn!("Possible NAT situation detected: observed {observed_addr} != reported {addr}. Will rewrite to {observed_addr} ");
                 addr = *observed_addr;
             }
         }
         self.transport_mapping.blocking_write().insert(hid, addr);
-
     }
 }
 
@@ -218,8 +226,7 @@ fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: IpAddr, port: 
 }
 
 fn get_bc_message(hid: &str, ip: IpAddr, port: u32) -> Msg {
-
-    let addr = match ip{
+    let addr = match ip {
         IpAddr::V4(ipv4_addr) => lg::socket_addr::Ip::V4(ipv4_addr.into()),
         IpAddr::V6(_ipv6_addr) => todo!(),
     };

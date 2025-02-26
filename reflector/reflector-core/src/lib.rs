@@ -1,9 +1,7 @@
-
-
+pub mod api;
+mod core;
+pub mod game;
 mod handlers;
 mod mapper;
-mod core;
-pub mod api;
-pub mod game;
 
 pub use core::Core;

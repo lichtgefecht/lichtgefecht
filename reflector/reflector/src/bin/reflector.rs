@@ -3,14 +3,12 @@ use std::sync::Arc;
 use env_logger::Env;
 use log::{error, info};
 use reflector::{config::read_config, tokio_tools::duplex_pair, transport::UdpTransport};
-use reflector_core::{api::infra::Stoppable, Core, api::transport::Transport};
+use reflector_core::{api::infra::Stoppable, api::transport::Transport, Core};
 use tokio::signal;
 
 #[tokio::main]
 async fn main() {
-
     let config = read_config();
-    
 
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 

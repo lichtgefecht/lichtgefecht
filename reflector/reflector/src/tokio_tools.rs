@@ -26,6 +26,10 @@ impl<T, R> TokioDuplex<T, R> {
     }
 }
 
+/**
+ * Blocking implementation to interface with the tokio types from outside the async runtime.
+ * This is located in this crate, so the core crate does not need to be aware of tokio at all.
+ */
 impl<T, R> Duplex<T, R> for TokioDuplex<T, R> {
     fn send(&self, t: T) -> Result<(), std::sync::mpsc::SendError<T>> {
         self.tx.blocking_send(t).map_err(|e| SendError(e.0))
