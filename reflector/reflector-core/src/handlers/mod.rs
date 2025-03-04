@@ -7,10 +7,21 @@ pub use handler_unimpl::*;
 
 use crate::Core;
 
-pub trait MessageHandler // where T : MsgMarker + Sized + 'static
+pub trait MessageHandler
+// where T :MessageTrait
 {
-    type Message : MsgMarker;
+    type Message;
     fn handle(&self, core: &Core, message: &Self::Message);
 }
 
-pub trait MsgMarker {}
+
+// pub trait MessageStateVerwalter<T>
+// where T :MessageTrait
+// {
+//     // type Message : MessageTrait;
+//     fn handle(&self, core: &Core, message: &T, state: &mut MyState);
+// }
+
+// pub trait MessageTrait<S>;
+pub trait MessageTrait {
+}

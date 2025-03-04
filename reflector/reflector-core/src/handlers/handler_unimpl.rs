@@ -1,22 +1,10 @@
-use log::warn;
+use std::marker::PhantomData;
 
 use crate::Core;
 
-use super::{MessageHandler, MsgMarker};
+use super::{MessageHandler, MessageTrait};
 
-// pub struct UnimplementedMessageHandler {
-//     msg: String,
-// }
-// impl UnimplementedMessageHandler {
-//     pub fn new(msg: String) -> Box<Self> {
-//         Box::new(UnimplementedMessageHandler { msg })
-//     }
-// }
-// impl MessageHandler for UnimplementedMessageHandler {
-//     fn handle(&self, _core: &mut Core) {
-//         warn!("Handling unimplemented message: {:?}", self.msg);
-//     }
-// }
+
 
 pub struct IgnoredMessageHandler;
 
@@ -25,22 +13,36 @@ impl IgnoredMessageHandler {
         IgnoredMessageHandler
     }
 }
-// impl MessageHandler for IgnoredMessageHandler {
-//     fn handle(&self, _core: &mut Core) {}
-// }
-pub struct Foo;
-pub struct Bar;
-impl MsgMarker for Foo {}
-impl MsgMarker for Bar {}
-impl MsgMarker for Box<Foo> {}
-impl MsgMarker for Box<Bar> {}
-impl MsgMarker for Box<dyn MsgMarker> {}
+
+pub struct MsgFoo;
+pub struct MsgBar;
+
+pub struct SomeState;
+
+
+//????
+// impl MessageTrait for MsgFoo{}
+
+// impl MessageTrait for MsgBar {}
+// impl MessageTrait for Box<MsgFoo> {}
+// impl MessageTrait for Box<MsgBar> {}
+// impl MessageTrait for Box<dyn MessageTrait> {}
 
 impl MessageHandler for IgnoredMessageHandler {
-    type Message = Box<Foo>;
-    fn handle(&self, _core: &Core, message: &Self::Message) {}
+    type Message = MsgFoo;
+    fn handle(&self, _core: &Core, message: &Self::Message) {}    
 }
+
+// impl MessageHandler<MsgBar> for IgnoredMessageHandler {
+//     fn handle(&self, _core: &Core, message: &MsgBar) {}
+// }
+
 // impl MessageHandler for IgnoredMessageHandler {
-//     type Message = Bar;
-//     fn handle(_core: &mut Core, message: Box<Bar>) {}
+//     type Message = Box<MsgFoo>;
+//     fn handle(&self, _core: &Core, message: &Self::Message) {}
+// }
+
+// impl MessageHandler for IgnoredMessageHandler {
+//     type Message = Box<MsgBar>;
+//     fn handle(_core: &mut Core, message: &Self::Message) {}
 // }

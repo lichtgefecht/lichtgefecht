@@ -1,16 +1,16 @@
 use log::{info, warn};
 use reflector_api::lg::Msg;
-use std::sync::{
+use std::{any::Any, sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
-};
+}};
 
-use crate::api::transport::{CoreDuplex, Duplex, MsgWithTarget, TransportHandle};
+use crate::{api::transport::{CoreDuplex, Duplex, MsgWithTarget, TransportHandle}, handlers::{MsgBar, SomeState}};
 use crate::game::state::State;
 use crate::mapper;
 use crate::{
     api::infra::Stoppable,
-    handlers::{Foo, IgnoredMessageHandler, MessageHandler, MsgMarker},
+    handlers::{MsgFoo, IgnoredMessageHandler, MessageHandler, MessageTrait},
 };
 
 pub struct Core {
@@ -18,7 +18,8 @@ pub struct Core {
     duplex: Box<CoreDuplex>,
     should_stop: Arc<AtomicBool>,
     pub(crate) handle: Arc<dyn TransportHandle + Send + Sync>,
-    handlers: Vec<Box<dyn MessageHandler<Message = Box<dyn MsgMarker>>+ Send + Sync>>,
+    handlers: Vec<Box<dyn MessageHandler<Message = MsgFoo>+ Send + Sync>>,
+    // handlers: Vec<Box<dyn MessageHandler+ Send + Sync>>,
 }
 
 impl Core {
@@ -26,17 +27,14 @@ impl Core {
         duplex_for_core: impl Duplex<MsgWithTarget, Msg> + 'static + Send,
         handle: Arc<dyn TransportHandle + Send + Sync>,
     ) -> Self {
-        let f = Box::new(IgnoredMessageHandler{}) as Box<dyn MessageHandler<Message = Box<Foo>>>;
-        let f = f as Box<dyn MessageHandler<Message = Box<dyn MsgMarker>>>;
+        let a = Box::new(IgnoredMessageHandler{});// as Box<dyn MessageHandler<Message = Box<(dyn MessageTrait + 'static)>> + Send + Sync>;
 
         Core {
             state: State::default(),
             duplex: Box::new(duplex_for_core),
             should_stop: Arc::new(AtomicBool::new(false)),
             handle,
-            handlers: vec![
-                // Box::new(IgnoredMessageHandler {})
-                ]
+            handlers: vec![a]
         }
     }
 
@@ -59,8 +57,8 @@ impl Core {
 
     pub fn on_message_received(&mut self, msg: Msg) {
 
-        let bmsg = Box::new(Foo);
-        let handler = self.handlers.get(0).unwrap();
+        // let bmsg = Box::new(MsgFoo);
+        // let handler = self.handlers.get(0).unwrap();
         // handler.handle(self, &Foo);
 
 
