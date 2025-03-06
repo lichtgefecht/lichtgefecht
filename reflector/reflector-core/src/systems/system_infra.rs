@@ -1,8 +1,6 @@
-use log::{debug, info, warn};
-use crate::{api::infra::Stoppable, core::InnerCore, message::CoreMessage};
 use super::System;
-
-
+use crate::{api::infra::Stoppable, core::InnerCore, message::CoreMessage};
+use log::{debug, info, warn};
 
 pub struct InfraSystem;
 
@@ -12,8 +10,8 @@ impl System<CoreMessage> for InfraSystem {
             CoreMessage::Shutdown => {
                 core.shutdown_hook.stop();
                 info!("Shutting down via infra system");
-            },
-            _=>()
+            }
+            _ => (),
         }
-    }    
+    }
 }

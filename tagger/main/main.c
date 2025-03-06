@@ -51,14 +51,9 @@ static int build_broadcast_reply(Lg__Msg** built_msg){
 
     msg->broadcastreply = malloc(sizeof(Lg__BroadcastReply));
     lg__broadcast_reply__init(msg->broadcastreply);
-    msg->broadcastreply->client_addr_case = LG__BROADCAST_REPLY__CLIENT_ADDR_SOCKET_ADDR;
     msg->broadcastreply->devicetype = LG__DEVICE_TYPE__TAGGER;
-
-    msg->broadcastreply->socketaddr = malloc(sizeof(Lg__SocketAddr));
-    lg__socket_addr__init( msg->broadcastreply->socketaddr);
-    msg->broadcastreply->socketaddr->ip_case = LG__SOCKET_ADDR__IP_V4;
-    msg->broadcastreply->socketaddr->v4 = 1337;
-    msg->broadcastreply->socketaddr->port = 1337;
+    
+    com_build_broadcast_reply(msg->broadcastreply);
 
     *built_msg = msg;
 
@@ -90,7 +85,10 @@ static void broadcast_handler_task(void *pv_parameters) {
             switch (rcv_msg->inner_case) {
                 case LG__MSG__INNER_BROADCAST: {
                     ESP_LOGI(TAG, "Received broadcast\n");
-                    broadcast_received = true;
+                    status = com_handle_broadcast(rcv_msg->broadcast);
+                    if (status == 0) {
+                        broadcast_received = true;
+                    }
                 }
                 break;
                 default:
@@ -103,7 +101,7 @@ static void broadcast_handler_task(void *pv_parameters) {
 
         status = build_broadcast_reply(&reply_msg);
 
-        status = com_send_message(reply_msg, rcv_msg->broadcast->socketaddr);
+        status = com_send_message(reply_msg);
         free(rcv_msg);
         free(reply_msg);
     }

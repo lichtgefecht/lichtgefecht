@@ -8,10 +8,10 @@ use std::{
 
 use bytes::Bytes;
 use log::{debug, error, info, warn};
-use reflector_core::{api::{
-    infra::Stoppable,
-    transport::Transport,
-}, CoreMessage, CreateNewSessionMsg, MsgWithTarget, OutgoingMessage};
+use reflector_core::{
+    api::{infra::Stoppable, transport::Transport},
+    CoreMessage, CreateNewSessionMsg, MsgWithTarget, OutgoingMessage,
+};
 use tokio::{
     net::UdpSocket,
     select,
@@ -62,7 +62,7 @@ impl Transport for UdpTransport {
         info!("UdpTransport listening on: {}", socket.local_addr()?);
         socket.set_broadcast(true).expect("Kaboom");
 
-        let (snd_tx, mut snd_rx) = mpsc::channel(512);
+        let (snd_tx, mut snd_rx) = mpsc::channel(512); // todo, be gone
         let (core_tx, mut core_rx) = self.crack_duplex().await;
 
         let notif = self.shutdown_notify.clone();
@@ -75,7 +75,6 @@ impl Transport for UdpTransport {
             advertise_addr,
             advertise_port as u32,
         );
-        
 
         // the main event loop
 
@@ -92,7 +91,7 @@ impl Transport for UdpTransport {
             // if select is not fair, we might starve the shutdown notifications
             // therefore, the shutting_down boolean is checked after each receive/send/notification
             if let Some(_) = self.check_shutdown(&core_tx).await {
-                return Ok(())
+                return Ok(());
             }
         }
     }
@@ -161,9 +160,9 @@ impl UdpTransport {
             .load(std::sync::atomic::Ordering::Relaxed)
         {
             warn!("Transport shutdown");
-            let _ = core_tx.send(CoreMessage::Shutdown)
-                .await
-                .map_err(|_| warn!("rcv_to_core channel closed while sending shutdown notification"));
+            let _ = core_tx.send(CoreMessage::Shutdown).await.map_err(|_| {
+                warn!("rcv_to_core channel closed while sending shutdown notification")
+            });
             return Some(());
         }
         None
@@ -173,12 +172,16 @@ impl UdpTransport {
         &self,
         msg: Option<OutgoingMessage>,
         sender: &mpsc::Sender<Frame>,
-    ) -> Result<(), ()>{
+    ) -> Result<(), ()> {
         let msg = msg.ok_or(())?;
         match msg {
-            OutgoingMessage::MsgWithTarget(msg_with_target) => send_to_net(&sender, &self.transport_mapping, msg_with_target).await,
-            OutgoingMessage::CreateNewSession(CreateNewSessionMsg{hid, addr, ..}) => self.add_address_entry(hid, addr).await,
-        }; 
+            OutgoingMessage::MsgWithTarget(msg_with_target) => {
+                send_to_net(&sender, &self.transport_mapping, msg_with_target).await
+            }
+            OutgoingMessage::CreateNewSession(CreateNewSessionMsg { hid, addr, .. }) => {
+                self.add_address_entry(hid, addr).await
+            }
+        };
         Ok(())
     }
 
@@ -208,8 +211,11 @@ impl UdpTransport {
     }
 }
 
-
-async fn send_to_net(sender: &mpsc::Sender<Frame>, transport_mapping: &Arc<RwLock<HashMap<String, SocketAddr>>>, msg: MsgWithTarget) {
+async fn send_to_net(
+    sender: &mpsc::Sender<Frame>,
+    transport_mapping: &Arc<RwLock<HashMap<String, SocketAddr>>>,
+    msg: MsgWithTarget,
+) {
     let mut buf = Vec::with_capacity(msg.msg.encoded_len());
     msg.msg.encode(&mut buf).expect("Kaboom");
     if let Some(addr) = transport_mapping.read().await.get(&msg.target_hid) {

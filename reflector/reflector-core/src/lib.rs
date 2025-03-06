@@ -1,8 +1,8 @@
 pub mod api;
 mod core;
 pub mod game;
-mod systems;
 mod message;
+mod systems;
 
 pub use core::Core;
 pub use message::*;

@@ -2,14 +2,15 @@ extern crate proc_macro;
 use core::panic;
 
 use proc_macro::TokenStream;
-use syn::{parse::{Parse, ParseStream}, Data, Token};
-use quote::{quote, ToTokens};
-
+use quote::{ToTokens, quote};
+use syn::{
+    Data, Token,
+    parse::{Parse, ParseStream},
+};
 
 struct MyParams(syn::Ident, syn::Ident);
 impl Parse for MyParams {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-
         // let content;
         panic!("CONTENT: {input}");
         // syn::parenthesized!(content in input);
@@ -22,19 +23,18 @@ impl Parse for MyParams {
     }
 }
 
-
 fn derive(ast: &syn::DeriveInput) -> TokenStream {
-    let attribute = ast.attrs.iter().filter(
-        |a| a.path().segments.len() == 1 && a.path().segments[0].ident == "my_trait"
-    ).nth(0).expect("my_trait attribute required for deriving MyTrait!");
+    let attribute = ast
+        .attrs
+        .iter()
+        .filter(|a| a.path().segments.len() == 1 && a.path().segments[0].ident == "my_trait")
+        .nth(0)
+        .expect("my_trait attribute required for deriving MyTrait!");
 
-    let parameters: MyParams = syn::parse2(attribute.to_token_stream()).expect("Invalid my_trait attribute!");
-    quote! {
-
-    }.into()
+    let parameters: MyParams =
+        syn::parse2(attribute.to_token_stream()).expect("Invalid my_trait attribute!");
+    quote! {}.into()
 }
-
-
 
 #[proc_macro_derive(MyTrait, attributes(my_trait))]
 pub fn system(item: TokenStream) -> TokenStream {
@@ -53,11 +53,12 @@ pub fn system(item: TokenStream) -> TokenStream {
                 //         handle![{self, core, message}
                 //             CombinedMessage::Foo
                 //             CombinedMessage::Bar
-                //             ];                
-                //     }    
+                //             ];
+                //     }
                 // }
             }
         }
-        _ => unimplemented!()
-    }.into()
+        _ => unimplemented!(),
+    }
+    .into()
 }

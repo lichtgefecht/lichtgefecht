@@ -13,6 +13,7 @@ pub struct TransportConfig {
     pub bind_addr: SocketAddrConfig,
     pub advertise_addr: Option<SocketAddrConfig>,
 }
+
 #[derive(Debug, Deserialize)]
 pub struct SocketAddrConfig {
     pub ip: String,

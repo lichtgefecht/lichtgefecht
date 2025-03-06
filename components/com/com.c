@@ -7,6 +7,10 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
+#include "lwip/ip4_addr.h"
 
 #include "codec.h"
 #include "com.h"
@@ -14,6 +18,9 @@
 typedef struct _com_self_s {
     int broadcast_sock;
     struct sockaddr_in broadcast_addr;
+    struct sockaddr_in base_addr;
+    uint8_t base_address_valid;
+    
 } _com_self;
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -30,6 +37,26 @@ static _com_self self;
 static const char *TAG = "com";
 
 static int s_retry_num = 0;
+
+static int _com_get_own_address(uint32_t *address){
+
+    esp_netif_ip_info_t ip_info;
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif == NULL) {
+        ESP_LOGE(TAG, "Failed to get network interface\n");
+        return -1;
+    }    
+
+    if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+        *address = ntohl(ip_info.ip.addr);
+    } else {
+        errno = EINVAL;
+        ESP_LOGE(TAG, "Failed to get IP\n");
+        return -1;
+    }
+    
+    return 0;
+}
 
 static void _com_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -196,16 +223,66 @@ int com_receive_message(Lg__Msg** msg){
     return 0;
 }
 
-int com_send_message(const Lg__Msg* msg, const Lg__SocketAddr* to){
+int com_send_message(const Lg__Msg* msg){
 
     uint8_t* buf;
     uint32_t len;
+
+    if(self.base_address_valid == 0){
+        ESP_LOGE(TAG, "Trying to send, but base address not known yet.\n");
+        errno = EINVAL;
+        return -1;
+    }
 
     len = lg__msg__get_packed_size(msg);
 
     buf = malloc(len);
     lg__msg__pack(msg, buf);
 
-    return sendto(self.broadcast_sock, buf, len , 0, (struct sockaddr *)&self.broadcast_addr, sizeof(self.broadcast_addr));
+    ESP_LOGI(TAG, "Sending to %lx:%x", self.base_addr.sin_addr.s_addr, self.base_addr.sin_port);
 
+    return sendto(self.broadcast_sock, buf, len , 0, (struct sockaddr *)&self.base_addr, sizeof(self.base_addr));
+
+}
+
+int com_handle_broadcast(const Lg__Broadcast* msg){
+    
+    if (msg->reflector_addr_case != LG__BROADCAST__REFLECTOR_ADDR_SOCKET_ADDR)
+    {
+        ESP_LOGE(TAG, "Address type of broadcast unknown.\n");
+        errno = ENOTSUP;
+        return -1;
+    } 
+    
+    Lg__SocketAddr *addr = msg->socketaddr;
+    switch (addr->ip_case)
+    {
+    case LG__SOCKET_ADDR__IP_V4:
+
+        self.base_addr.sin_family = AF_INET;
+        self.base_addr.sin_port = htons((uint16_t)addr->port);
+        self.base_addr.sin_addr.s_addr = htonl(addr->v4);
+        self.base_address_valid = 1;
+        
+        break;
+    
+    default:
+        errno = ENOTSUP;
+        return -1;
+    }
+    return 0;
+}
+
+
+int com_build_broadcast_reply(Lg__BroadcastReply* msg){
+    int status;
+    
+    msg->client_addr_case = LG__BROADCAST_REPLY__CLIENT_ADDR_SOCKET_ADDR;
+    msg->socketaddr = malloc(sizeof(Lg__SocketAddr));
+    lg__socket_addr__init( msg->socketaddr);
+    msg->socketaddr->ip_case = LG__SOCKET_ADDR__IP_V4;
+    status = _com_get_own_address(&msg->socketaddr->v4);
+    msg->socketaddr->port = 3333;
+
+    return status;
 }
