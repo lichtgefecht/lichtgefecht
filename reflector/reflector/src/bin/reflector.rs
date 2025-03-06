@@ -17,12 +17,12 @@ async fn main() {
     let (duplex_for_core, duplex_for_transport) = duplex_pair();
     let transport = Arc::new(UdpTransport::new(config.transport, duplex_for_transport));
 
-    let mut core = Core::new(duplex_for_core, transport.clone());
-    let core_hook = core.get_shutdown_hook();
+    let core_thread = std::thread::spawn(move ||{
+        let mut core = Core::new(duplex_for_core);
+        core.run()}
+    );
 
-    let core_thread = std::thread::spawn(move || core.run());
-
-    add_shutdown_hooks(vec![core_hook, transport.clone()]);
+    add_shutdown_hooks(vec![transport.clone()]);
 
     let _ = transport.run().await;
     core_thread.join().unwrap();

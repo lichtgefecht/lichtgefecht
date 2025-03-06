@@ -1,15 +1,13 @@
-use reflector_api::lg::{broadcast_reply::ClientAddr, Msg};
+use reflector_api::lg::broadcast_reply::ClientAddr;
 use std::sync::mpsc::{RecvError, SendError};
 use std::{error::Error, future::Future};
 
+use crate::message::OutgoingMessage;
+use crate::CoreMessage;
+
 use super::infra::Stoppable;
 
-pub type CoreDuplex = dyn Duplex<MsgWithTarget, Msg> + Send;
-
-pub struct MsgWithTarget {
-    pub target_hid: String,
-    pub msg: Msg,
-}
+pub type CoreDuplex = dyn Duplex<OutgoingMessage, CoreMessage> + Send;
 
 pub trait Duplex<T, R> {
     fn send(&self, t: T) -> Result<(), SendError<T>>;
@@ -18,8 +16,4 @@ pub trait Duplex<T, R> {
 
 pub trait Transport: Stoppable {
     fn run(&self) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
-}
-
-pub trait TransportHandle {
-    fn add_address_entry(&self, hid: String, addr: ClientAddr);
 }

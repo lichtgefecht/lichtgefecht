@@ -1,12 +1,10 @@
 use std::sync::mpsc::{RecvError, SendError};
 
-use reflector_api::lg::Msg;
-
-use reflector_core::api::transport::{Duplex, MsgWithTarget};
+use reflector_core::{api::transport::Duplex, CoreMessage, OutgoingMessage};
 
 pub fn duplex_pair() -> (
-    TokioDuplex<MsgWithTarget, Msg>,
-    TokioDuplex<Msg, MsgWithTarget>,
+    TokioDuplex<OutgoingMessage, CoreMessage>,
+    TokioDuplex<CoreMessage, OutgoingMessage>,
 ) {
     let (txa, rxa) = tokio::sync::mpsc::channel(512);
     let (txb, rxb) = tokio::sync::mpsc::channel(512);

@@ -8,10 +8,10 @@ use std::{
 
 use bytes::Bytes;
 use log::{debug, error, info, warn};
-use reflector_core::api::{
+use reflector_core::{api::{
     infra::Stoppable,
-    transport::{MsgWithTarget, Transport, TransportHandle},
-};
+    transport::Transport,
+}, CoreMessage, CreateNewSessionMsg, MsgWithTarget, OutgoingMessage};
 use tokio::{
     net::UdpSocket,
     select,
@@ -29,7 +29,7 @@ pub struct UdpTransport {
     config: TransportConfig,
     shutdown_notify: Arc<Notify>,
     shutting_down: AtomicBool,
-    duplex: Mutex<Option<TokioDuplex<Msg, MsgWithTarget>>>,
+    duplex: Mutex<Option<TokioDuplex<CoreMessage, OutgoingMessage>>>,
     transport_mapping: TransportMap,
     observed_transport_mapping: TransportMap,
 }
@@ -63,7 +63,7 @@ impl Transport for UdpTransport {
         socket.set_broadcast(true).expect("Kaboom");
 
         let (snd_tx, mut snd_rx) = mpsc::channel(512);
-        let (core_tx, core_rx) = self.crack_duplex().await;
+        let (core_tx, mut core_rx) = self.crack_duplex().await;
 
         let notif = self.shutdown_notify.clone();
 
@@ -75,7 +75,7 @@ impl Transport for UdpTransport {
             advertise_addr,
             advertise_port as u32,
         );
-        forward_messages_to_transport(snd_tx.clone(), core_rx, self.transport_mapping.clone());
+        
 
         // the main event loop
 
@@ -85,24 +85,21 @@ impl Transport for UdpTransport {
             let _ = select! {
                 frame = snd_rx.recv()                           => self.handle_send(frame, &socket).await,
                 rcv = socket.recv_from(&mut receive_buffer)     => self.handle_recv_buffer(&core_tx, rcv, &receive_buffer).await,
+                msg = core_rx.recv()                            => self.handle_message_from_core(msg, &snd_tx ).await,
                 _ = notif.notified()                            => self.handle_shutdown_notification().await,
             };
 
             // if select is not fair, we might starve the shutdown notifications
             // therefore, the shutting_down boolean is checked after each receive/send/notification
-            if self
-                .shutting_down
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                warn!("Transport shutdown");
-                return Ok(());
+            if let Some(_) = self.check_shutdown(&core_tx).await {
+                return Ok(())
             }
         }
     }
 }
 
 impl UdpTransport {
-    pub fn new(config: TransportConfig, duplex: TokioDuplex<Msg, MsgWithTarget>) -> Self {
+    pub fn new(config: TransportConfig, duplex: TokioDuplex<CoreMessage, OutgoingMessage>) -> Self {
         UdpTransport {
             shutdown_notify: Arc::new(Notify::new()),
             shutting_down: AtomicBool::new(false),
@@ -115,7 +112,7 @@ impl UdpTransport {
 
     async fn handle_recv_buffer(
         &self,
-        tx: &mpsc::Sender<Msg>,
+        tx: &mpsc::Sender<CoreMessage>,
         rcv: Result<(usize, SocketAddr), std::io::Error>,
         buf: &[u8],
     ) -> Result<(), ()> {
@@ -128,7 +125,10 @@ impl UdpTransport {
             .write()
             .await
             .insert(msg.hid.clone(), peer);
-        tx.send(msg)
+
+        let core_msg = CoreMessage::from(msg);
+
+        tx.send(core_msg)
             .await
             .map_err(|_| warn!("rcv_to_core channel closed"))
     }
@@ -149,15 +149,40 @@ impl UdpTransport {
         Ok(())
     }
 
-    async fn crack_duplex(&self) -> (mpsc::Sender<Msg>, mpsc::Receiver<MsgWithTarget>) {
+    async fn crack_duplex(&self) -> (mpsc::Sender<CoreMessage>, mpsc::Receiver<OutgoingMessage>) {
         let duplex = self.duplex.lock().await.take().unwrap();
         let (ctx, crx) = duplex.crack();
         (ctx, crx)
     }
-}
 
-impl TransportHandle for UdpTransport {
-    fn add_address_entry(&self, hid: String, addr: lg::broadcast_reply::ClientAddr) {
+    async fn check_shutdown(&self, core_tx: &mpsc::Sender<CoreMessage>) -> Option<()> {
+        if self
+            .shutting_down
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            warn!("Transport shutdown");
+            let _ = core_tx.send(CoreMessage::Shutdown)
+                .await
+                .map_err(|_| warn!("rcv_to_core channel closed while sending shutdown notification"));
+            return Some(());
+        }
+        None
+    }
+
+    async fn handle_message_from_core(
+        &self,
+        msg: Option<OutgoingMessage>,
+        sender: &mpsc::Sender<Frame>,
+    ) -> Result<(), ()>{
+        let msg = msg.ok_or(())?;
+        match msg {
+            OutgoingMessage::MsgWithTarget(msg_with_target) => send_to_net(&sender, &self.transport_mapping, msg_with_target).await,
+            OutgoingMessage::CreateNewSession(CreateNewSessionMsg{hid, addr, ..}) => self.add_address_entry(hid, addr).await,
+        }; 
+        Ok(())
+    }
+
+    async fn add_address_entry(&self, hid: String, addr: lg::broadcast_reply::ClientAddr) {
         let mut addr = match addr {
             lg::broadcast_reply::ClientAddr::SocketAddr(socket_addr) => match socket_addr.ip {
                 Some(Ip::V4(ip)) => {
@@ -173,39 +198,31 @@ impl TransportHandle for UdpTransport {
                 panic!("Not yet implemented");
             }
         };
-        if let Some(observed_addr) = self.observed_transport_mapping.blocking_read().get(&hid) {
+        if let Some(observed_addr) = self.observed_transport_mapping.read().await.get(&hid) {
             if addr != *observed_addr {
                 warn!("Possible NAT situation detected: observed {observed_addr} != reported {addr}. Will rewrite to {observed_addr} ");
                 addr = *observed_addr;
             }
         }
-        self.transport_mapping.blocking_write().insert(hid, addr);
+        self.transport_mapping.write().await.insert(hid, addr);
     }
 }
 
-fn forward_messages_to_transport(
-    sender: mpsc::Sender<Frame>,
-    mut receiver: mpsc::Receiver<MsgWithTarget>,
-    transport_mapping: TransportMap,
-) {
-    tokio::spawn(async move {
-        while let Some(msg) = receiver.recv().await {
-            let mut buf = Vec::with_capacity(msg.msg.encoded_len());
-            msg.msg.encode(&mut buf).expect("Kaboom");
-            if let Some(addr) = transport_mapping.read().await.get(&msg.target_hid) {
-                let frame = Frame(*addr, Bytes::copy_from_slice(&buf));
-                match sender.send(frame).await {
-                    Ok(_) => {
-                        debug!("Forwarded message to transport MsgWithTarget -> Frame")
-                    }
-                    Err(_e) => warn!("Failed to send to udp transport"),
-                }
-            } else {
-                warn!("Ignoring send command to unknown hid: {}", msg.target_hid)
+
+async fn send_to_net(sender: &mpsc::Sender<Frame>, transport_mapping: &Arc<RwLock<HashMap<String, SocketAddr>>>, msg: MsgWithTarget) {
+    let mut buf = Vec::with_capacity(msg.msg.encoded_len());
+    msg.msg.encode(&mut buf).expect("Kaboom");
+    if let Some(addr) = transport_mapping.read().await.get(&msg.target_hid) {
+        let frame = Frame(*addr, Bytes::copy_from_slice(&buf));
+        match sender.send(frame).await {
+            Ok(_) => {
+                debug!("Forwarded message to transport MsgWithTarget -> Frame")
             }
+            Err(_e) => warn!("Failed to send to udp transport"),
         }
-        warn!("forward_messages_to_transport task exiting")
-    });
+    } else {
+        warn!("Ignoring send command to unknown hid: {}", msg.target_hid)
+    }
 }
 
 fn spawn_broadcast_task(tx: mpsc::Sender<Frame>, hid: String, ip: IpAddr, port: u32) {

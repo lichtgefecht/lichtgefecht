@@ -1,88 +1,72 @@
-use log::{info, warn};
-use reflector_api::lg::Msg;
-use std::{any::Any, sync::{
+use log::{debug, info, warn};
+use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
-}};
+};
 
-use crate::{api::transport::{CoreDuplex, Duplex, MsgWithTarget, TransportHandle}, handlers::{MsgBar, SomeState}};
+use crate::{api::transport::{CoreDuplex, Duplex}, message::{CoreMessage, OutgoingMessage}, systems::{self, router}};
 use crate::game::state::State;
-use crate::mapper;
 use crate::{
     api::infra::Stoppable,
-    handlers::{MsgFoo, IgnoredMessageHandler, MessageHandler, MessageTrait},
+    systems::System,
 };
 
 pub struct Core {
-    pub(crate) state: State,
-    duplex: Box<CoreDuplex>,
     should_stop: Arc<AtomicBool>,
-    pub(crate) handle: Arc<dyn TransportHandle + Send + Sync>,
-    handlers: Vec<Box<dyn MessageHandler<Message = MsgFoo>+ Send + Sync>>,
-    // handlers: Vec<Box<dyn MessageHandler+ Send + Sync>>,
+    systems: Vec<Box<dyn System<CoreMessage>>>,
+    inner_core: InnerCore
+}
+
+pub struct InnerCore{
+    pub(crate) state: State,
+    pub(crate) duplex: Box<CoreDuplex>,
+    pub(crate) shutdown_hook: Arc<CoreShutdownHook>
 }
 
 impl Core {
-    pub fn new(
-        duplex_for_core: impl Duplex<MsgWithTarget, Msg> + 'static + Send,
-        handle: Arc<dyn TransportHandle + Send + Sync>,
-    ) -> Self {
-        let a = Box::new(IgnoredMessageHandler{});// as Box<dyn MessageHandler<Message = Box<(dyn MessageTrait + 'static)>> + Send + Sync>;
-
+    pub fn new(duplex_for_core: impl Duplex<OutgoingMessage, CoreMessage> + 'static + Send,) -> Self {
+        let should_stop =  Arc::new(AtomicBool::new(false));
+        let shutdown_hook = Arc::new(CoreShutdownHook {
+            should_stop: should_stop.clone(),
+        });
         Core {
-            state: State::default(),
-            duplex: Box::new(duplex_for_core),
-            should_stop: Arc::new(AtomicBool::new(false)),
-            handle,
-            handlers: vec![a]
+            should_stop,
+            inner_core: InnerCore{
+                state: State::default(),
+                duplex: Box::new(duplex_for_core),
+                shutdown_hook
+
+            },
+            systems: router::get_registrations()
         }
     }
 
     pub fn run(&mut self) {
-        loop {
-            match self.duplex.recv() {
+        while ! self.should_stop.load(Ordering::Relaxed) {
+            match self.inner_core.duplex.recv() {
                 Ok(msg) => self.on_message_received(msg),
-                Err(_) if self.should_stop.load(Ordering::Relaxed) => {
-                    info!("Core channel hung up, shutting down");
-                    break;
-                }
-                Err(_) => {
-                    warn!("Core channel hung up without clean shutdown");
-                    break;
-                }
+                Err(_) => break
             }
         }
-        self.shutdown();
+        self.shutdown();        
     }
 
-    pub fn on_message_received(&mut self, msg: Msg) {
-
-        // let bmsg = Box::new(MsgFoo);
-        // let handler = self.handlers.get(0).unwrap();
-        // handler.handle(self, &Foo);
-
-
-        // let handler = self.to_message_handler(0);
-
-        // let bmsg = Box::new(Foo);
-        // // let handler = IgnoredMessageHandler::handle;
-        // // handler(self, &Foo);
-        // let handler = IgnoredMessageHandler {};
-        // handler.handle(self, &Foo);
-        // handler(self, &(Box::new(Foo) as Box<dyn MsgMarker+ 'static>));
+    pub fn on_message_received(&mut self, msg: CoreMessage) {
+        let systems = router::get_systems(&mut self.systems, &msg);
+        for sys in systems{
+            sys.handle(&mut self.inner_core, &msg);
+        }
     }
+
     pub fn shutdown(&mut self) {
         info!("Shutting down core");
-        info!("Registered clients: {:#?}", self.state.devices);
+        info!("Registered clients: {:#?}", self.inner_core.state.devices);
     }
+
     pub fn get_shutdown_hook(&self) -> Arc<CoreShutdownHook> {
-        Arc::new(CoreShutdownHook {
-            should_stop: self.should_stop.clone(),
-        })
+        self.inner_core.shutdown_hook.clone()
     }
-    // pub fn to_message_handler(&self, id: usize) {
-    // // pub fn to_message_handler(&self, id: usize) -> &Box<dyn MessageHandler<Message = Foo>+ Send + Sync>{
-    // }
+    
 }
 
 pub struct CoreShutdownHook {
