@@ -1,36 +1,44 @@
+#include <errno.h>
 #include <inttypes.h>
+#include <lg.pb-c.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 
+#include "codec.h"
+#include "com.h"
 #include "diag.h"
 #include "esp_log.h"
 #include "esp_system.h"
-#include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "com.h"
-#include "codec.h"
-#include <lg.pb-c.h>
+#include "nvs_flash.h"
+#include "remote.h"
 
 #define BROADCAST_PRIORITY 5
+#define TRIGGER_PRIORITY 5
+#define RECEIVER_PRIORITY 5
 
 static const char* TAG = "tagger_main";
 
-static void broadcast_handler_task(void *pv_parameters);
+static void broadcast_handler_task(void* pv_parameters);
 static void init_nvs(void);
 
 void app_main(void) {
     selftest("Tagger");
 
-    init_nvs();
-    com_init_wifi_station();
+    // init_nvs();
+    // com_init_wifi_station();
 
     ESP_LOGI(TAG, "Wifi ready!\n");
 
-    xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
+    // xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
+    // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
+    // xTaskCreate(receiver_handler_task, "receiver handler", 4096, NULL, RECEIVER_PRIORITY, NULL);
+
 
 }
+
+
 
 static void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -41,8 +49,7 @@ static void init_nvs(void) {
     ESP_ERROR_CHECK(ret);
 }
 
-static int build_broadcast_reply(Lg__Msg** built_msg){
-
+static int build_broadcast_reply(Lg__Msg** built_msg) {
     Lg__Msg* msg = malloc(sizeof(Lg__Msg));
     lg__msg__init(msg);
 
@@ -52,7 +59,7 @@ static int build_broadcast_reply(Lg__Msg** built_msg){
     msg->broadcastreply = malloc(sizeof(Lg__BroadcastReply));
     lg__broadcast_reply__init(msg->broadcastreply);
     msg->broadcastreply->devicetype = LG__DEVICE_TYPE__TAGGER;
-    
+
     com_build_broadcast_reply(msg->broadcastreply);
 
     *built_msg = msg;
@@ -60,24 +67,22 @@ static int build_broadcast_reply(Lg__Msg** built_msg){
     return 0;
 }
 
-static void broadcast_handler_task(void *pv_parameters) {
-    
-    (void) pv_parameters;
+static void broadcast_handler_task(void* pv_parameters) {
+    (void)pv_parameters;
     Lg__Msg* rcv_msg = NULL;
     Lg__Msg* reply_msg = NULL;
     int status;
 
     status = com_init();
-    if (status != 0){
+    if (status != 0) {
         ESP_LOGE(TAG, "Initializing com failed with error %s.\n", strerror(errno));
     }
-    
-    while (1){
+
+    while (1) {
         bool broadcast_received = false;
         do {
-
             status = com_receive_message(&rcv_msg);
-            if(status != 0 || rcv_msg == NULL){
+            if (status != 0 || rcv_msg == NULL) {
                 ESP_LOGE(TAG, "Receiving a broadcast message failed with %s. Deleting self.", strerror(errno));
                 continue;
             }
@@ -89,15 +94,14 @@ static void broadcast_handler_task(void *pv_parameters) {
                     if (status == 0) {
                         broadcast_received = true;
                     }
-                }
-                break;
+                } break;
                 default:
                     ESP_LOGE(TAG, "inner case not defined: %d\n", rcv_msg->inner_case);
                     free(rcv_msg);
                     break;
             }
 
-        } while(!broadcast_received);
+        } while (!broadcast_received);
 
         status = build_broadcast_reply(&reply_msg);
 
@@ -105,5 +109,4 @@ static void broadcast_handler_task(void *pv_parameters) {
         free(rcv_msg);
         free(reply_msg);
     }
-
 }
