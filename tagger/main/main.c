@@ -37,9 +37,6 @@ void app_main(void) {
 
     ESP_LOGI(TAG, "Wifi ready!\n");
 
-    // xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
-    // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
-
     // Setup the receiver (currently one)
     QueueHandle_t receive_queue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
     memset(&rx_cfg, 0, sizeof(remote_config_t));
@@ -57,6 +54,8 @@ void app_main(void) {
     // Start the rx and tx handler tasks
     xTaskCreate(rx_handler_task, "receive handler", 4096, (void*)&rx_cfg, RECEIVER_PRIORITY, NULL);
     xTaskCreate(tx_handler_task, "transmit handler", 4096, (void*)&tx_cfg, RECEIVER_PRIORITY, NULL);
+    // xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
+    // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
 
     vTaskSuspend(NULL);
 }

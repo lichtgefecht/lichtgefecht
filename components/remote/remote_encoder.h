@@ -7,25 +7,19 @@
 
 #include <stdint.h>
 #include "driver/rmt_encoder.h"
+#include "remote.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief IR NEC scan code representation
- */
-typedef struct {
-    uint16_t address;
-    uint16_t command;
-} ir_nec_scan_code_t;
 
 /**
  * @brief Type of IR NEC encoder configuration
  */
 typedef struct {
     uint32_t resolution; /*!< Encoder resolution, in Hz */
-} ir_nec_encoder_config_t;
+} remote_encoder_config_t;
 
 /**
  * @brief Create RMT encoder for encoding IR NEC frame into RMT symbols
@@ -37,7 +31,7 @@ typedef struct {
  *      - ESP_ERR_NO_MEM out of memory when creating IR NEC encoder
  *      - ESP_OK if creating encoder successfully
  */
-esp_err_t rmt_new_ir_nec_encoder(const ir_nec_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder);
+esp_err_t remote_encoder_new(const remote_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder);
 
 #ifdef __cplusplus
 }

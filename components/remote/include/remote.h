@@ -8,6 +8,14 @@
 extern "C" {
 #endif
 
+/**
+ * @brief IR NEC scan code representation
+ */
+typedef struct {
+    uint16_t address;
+    uint16_t command;
+} remote_scan_code_t;
+
 typedef struct remote_config_s {
     gpio_num_t gpio_num;
     QueueHandle_t queue;
