@@ -18,6 +18,12 @@
 #define TRIGGER_PRIORITY 5
 #define RECEIVER_PRIORITY 5
 
+#define REMOTE_RX_PIN 38
+#define REMOTE_TX_PIN 42
+
+remote_config_t rx_cfg;
+remote_config_t tx_cfg;
+
 static const char* TAG = "tagger_main";
 
 static void broadcast_handler_task(void* pv_parameters);
@@ -33,12 +39,27 @@ void app_main(void) {
 
     // xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
     // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
-    // xTaskCreate(receiver_handler_task, "receiver handler", 4096, NULL, RECEIVER_PRIORITY, NULL);
 
+    // Setup the receiver (currently one)
+    QueueHandle_t receive_queue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
+    memset(&rx_cfg, 0, sizeof(remote_config_t));
+    rx_cfg.gpio_num = REMOTE_RX_PIN;
+    rx_cfg.queue = receive_queue;
+    ESP_ERROR_CHECK(remote_create_receiver(&rx_cfg));
 
+    // Setup the transmitter
+    QueueHandle_t transmit_queue = xQueueCreate(1, sizeof(rmt_tx_done_event_data_t));
+    memset(&tx_cfg, 0, sizeof(remote_config_t));
+    tx_cfg.gpio_num = REMOTE_TX_PIN;
+    tx_cfg.queue = transmit_queue;
+    ESP_ERROR_CHECK(remote_create_transmitter(&tx_cfg));
+
+    // Start the rx and tx handler tasks
+    xTaskCreate(rx_handler_task, "receive handler", 4096, (void*)&rx_cfg, RECEIVER_PRIORITY, NULL);
+    xTaskCreate(tx_handler_task, "transmit handler", 4096, (void*)&tx_cfg, RECEIVER_PRIORITY, NULL);
+
+    vTaskSuspend(NULL);
 }
-
-
 
 static void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
