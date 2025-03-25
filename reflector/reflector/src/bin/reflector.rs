@@ -10,7 +10,7 @@ use tokio::signal;
 async fn main() {
     let config = read_config();
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     info!("{config:#?}");
 

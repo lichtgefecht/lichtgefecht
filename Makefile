@@ -10,6 +10,9 @@ tagger: proto-c
 
 flash-tagger: tagger
 	make -C tagger flash
+
+flash-tagger2: tagger
+	make -C tagger flash2
 	
 proto-c:
 	protoc-c --c_out=components/lg_api --proto_path=api lg.proto

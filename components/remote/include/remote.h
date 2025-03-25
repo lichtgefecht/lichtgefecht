@@ -18,7 +18,8 @@ typedef struct {
 
 typedef struct remote_config_s {
     gpio_num_t gpio_num;
-    QueueHandle_t queue;
+    QueueHandle_t raw_queue;
+    QueueHandle_t encoded_queue;
     rmt_channel_handle_t channel;
 } remote_config_t;
 

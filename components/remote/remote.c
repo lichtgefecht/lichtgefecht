@@ -2,6 +2,7 @@
 #include "remote.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "driver/rmt_rx.h"
 #include "driver/rmt_tx.h"
@@ -45,34 +46,6 @@ static bool example_rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt
     return high_task_wakeup == pdTRUE;
 }
 
-/**
- * @brief Decode RMT symbols into NEC scan code and print the result
- */
-static void remote_handle_nec_frame(rmt_symbol_word_t* rmt_nec_symbols, size_t symbol_num) {
-    // printf("NEC frame start---\r\n");
-    // for (size_t i = 0; i < symbol_num; i++) {
-    //     printf("{%d:%d},{%d:%d}\r\n", rmt_nec_symbols[i].level0, rmt_nec_symbols[i].duration0,
-    //            rmt_nec_symbols[i].level1, rmt_nec_symbols[i].duration1);
-    // }
-    // printf("---NEC frame end: ");
-
-    if (symbol_num != 34) {
-        ESP_LOGE(TAG, "Unknown NEC frame\r\n\r\n");
-        return;
-    }
-
-    remote_scan_code_t scan_code = {
-        .address = 0,
-        .command = 0,
-    };
-
-    if (!nec_parse_frame(rmt_nec_symbols, &scan_code)) {
-        ESP_LOGE(TAG, "Frame could not be parsed");
-    }
-
-    printf("Address=%04X, Command=%04X\r\n\r\n", scan_code.address, scan_code.command);
-}
-
 int remote_create_receiver(remote_config_t* cfg) {
     ESP_LOGI(TAG, "create RMT RX channel");
     rmt_rx_channel_config_t rx_channel_cfg = {
@@ -90,7 +63,7 @@ int remote_create_receiver(remote_config_t* cfg) {
         .on_recv_done = example_rmt_rx_done_callback,
     };
 
-    ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(cfg->channel, &cbs, cfg->queue));
+    ESP_ERROR_CHECK(rmt_rx_register_event_callbacks(cfg->channel, &cbs, cfg->raw_queue));
 
     ESP_ERROR_CHECK(rmt_enable(cfg->channel));
     return 0;
@@ -125,13 +98,23 @@ void rx_handler_task(void* pv_parameters) {
 
     // high-low pairs
     rmt_symbol_word_t raw_symbols[64];
+    remote_scan_code_t scan_code;
 
     while (1) {
         // start receive job, this will enable the done_callback
         // the done_callback will then write the data into the queue
         ESP_ERROR_CHECK(rmt_receive(rmt_cfg->channel, raw_symbols, sizeof(raw_symbols), &receive_config));
-        if (xQueueReceive(rmt_cfg->queue, &rx_data, portMAX_DELAY) == pdPASS) {
-            remote_handle_nec_frame(rx_data.received_symbols, rx_data.num_symbols);
+        if (xQueueReceive(rmt_cfg->raw_queue, &rx_data, portMAX_DELAY) == pdPASS) {
+            
+            memset(&scan_code, 0, sizeof(remote_scan_code_t));    
+            
+            // Parse the frame and if it is parsable send it to the encoded queue
+            if (nec_parse_frame(raw_symbols, &scan_code)) {
+                ESP_LOGI(TAG, "Received frame: Address=%04X, Command=%04X\n", scan_code.address, scan_code.command);
+                xQueueSend(rmt_cfg->encoded_queue, &scan_code, portMAX_DELAY);
+            } else{
+                ESP_LOGW(TAG, "Frame could not be parsed");
+            }
         } else {
             ESP_LOGE(TAG,
                      "rx_handler_task did not receive element in the queue within portMAX_DELAY(%ld)ms, giving up.",
@@ -143,6 +126,7 @@ void rx_handler_task(void* pv_parameters) {
 
 void tx_handler_task(void* pv_parameters) {
     remote_config_t* rmt_cfg = (remote_config_t*)pv_parameters;
+    remote_scan_code_t scan_code;
 
     ESP_LOGI(TAG, "Install IR NEC encoder");
     remote_encoder_config_t nec_encoder_cfg = {
@@ -151,13 +135,16 @@ void tx_handler_task(void* pv_parameters) {
     rmt_encoder_handle_t nec_encoder = NULL;
     ESP_ERROR_CHECK(remote_encoder_new(&nec_encoder_cfg, &nec_encoder));
 
+    uint16_t addr = 0x0000;
+    uint16_t command = 0x0000;
+
     while (!0) {
         vTaskDelay(100);
 
-        const remote_scan_code_t scan_code = {
-            .address = 0x0440,
-            .command = 0x3003,
-        };
+        scan_code.address = addr;
+        scan_code.command = command;
+        
+        command++;
 
         ESP_ERROR_CHECK(rmt_transmit(rmt_cfg->channel, nec_encoder, &scan_code, sizeof(scan_code), &transmit_config));
     }

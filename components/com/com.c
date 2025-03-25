@@ -211,7 +211,7 @@ int com_receive_message(Lg__Msg** msg){
             return -1;
         }
 
-        codec_print_msg(buffer, bytes_received);
+        // codec_print_msg(buffer, bytes_received); // for debugging only
         *msg = lg__msg__unpack(NULL, bytes_received, buffer);
         if(*msg == NULL){
             ESP_LOGE(TAG, "Bad message\n");
@@ -227,6 +227,7 @@ int com_send_message(const Lg__Msg* msg){
 
     uint8_t* buf;
     uint32_t len;
+    int32_t sent_bytes;
 
     if(self.base_address_valid == 0){
         ESP_LOGE(TAG, "Trying to send, but base address not known yet.\n");
@@ -241,7 +242,14 @@ int com_send_message(const Lg__Msg* msg){
 
     ESP_LOGI(TAG, "Sending to %lx:%x", self.base_addr.sin_addr.s_addr, self.base_addr.sin_port);
 
-    return sendto(self.broadcast_sock, buf, len , 0, (struct sockaddr *)&self.base_addr, sizeof(self.base_addr));
+    sent_bytes = sendto(self.broadcast_sock, buf, len , 0, (struct sockaddr *)&self.base_addr, sizeof(self.base_addr));
+    
+    if (sent_bytes != len){
+        ESP_LOGW(TAG, "Tried to send %ld bytes, but %li bytes were sent", len, sent_bytes);
+    }
+
+    free(buf);
+    return sent_bytes;
 
 }
 

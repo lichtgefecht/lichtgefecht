@@ -9,6 +9,9 @@ build:
 flash: build
 	idf.py -p /dev/ttyACM0 --ccache flash monitor
 
+flash2: build
+	idf.py -p /dev/ttyACM1 --ccache flash monitor
+
 clean:
 	rm -f sdkconfig
 	rm -f sdkconfig.defaults

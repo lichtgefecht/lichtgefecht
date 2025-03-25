@@ -12,5 +12,6 @@ pub(crate) fn get_registrations() -> Vec<Box<dyn System<crate::CoreMessage>>> {
         Box::new(BroadcastSystem {}),
         Box::new(IgnoredMessageHandler {}),
         Box::new(InfraSystem {}),
+        Box::new(HitMessageHandler {}),
     ]
 }

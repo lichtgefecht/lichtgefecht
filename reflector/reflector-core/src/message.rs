@@ -7,6 +7,7 @@ pub enum CoreMessage {
     BroadcastReply(String, BroadcastReply),
     Shutdown,
     UnknownMessage,
+    TargetHit(String, i32)
 }
 
 impl MessageTrait for CoreMessage {}
@@ -19,7 +20,7 @@ impl From<Msg> for CoreMessage {
             reflector_api::lg::msg::Inner::BroadcastReply(broadcast_reply) => {
                 CoreMessage::BroadcastReply(value.hid, broadcast_reply)
             }
-            reflector_api::lg::msg::Inner::TargetHit(_) => todo!(),
+            reflector_api::lg::msg::Inner::TargetHit(hit_msg) => CoreMessage::TargetHit(value.hid, hit_msg.from_id),
         }
     }
 }

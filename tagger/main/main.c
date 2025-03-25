@@ -17,6 +17,7 @@
 #define BROADCAST_PRIORITY 5
 #define TRIGGER_PRIORITY 5
 #define RECEIVER_PRIORITY 5
+#define MAIN_PRIORITY 5
 
 #define REMOTE_RX_PIN 38
 #define REMOTE_TX_PIN 42
@@ -28,36 +29,122 @@ static const char* TAG = "tagger_main";
 
 static void broadcast_handler_task(void* pv_parameters);
 static void init_nvs(void);
+static void main_loop_task(void* pv_parameters);
+static int hit(remote_scan_code_t* hit_msg);
+
+#define RECEIVE_QUEUE_LENGTH 1
+#define TRANSMIT_QUEUE_LENGTH 1
+#define COMBINED_LENGTH ( RECEIVE_QUEUE_LENGTH + \
+                          TRANSMIT_QUEUE_LENGTH )
+
+typedef struct main_loop_config_s{
+    QueueHandle_t receive_queue;
+    QueueHandle_t transmit_queue;
+    QueueHandle_t trigger_queue;
+    QueueSetHandle_t xQueueSet;
+}main_loop_config_t;
+
 
 void app_main(void) {
     selftest("Tagger");
 
-    // init_nvs();
-    // com_init_wifi_station();
+    init_nvs();
+    com_init_wifi_station();
 
     ESP_LOGI(TAG, "Wifi ready!\n");
 
     // Setup the receiver (currently one)
-    QueueHandle_t receive_queue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
+    QueueHandle_t receive_queue_raw = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
+    QueueHandle_t receive_queue = xQueueCreate(RECEIVE_QUEUE_LENGTH, sizeof(rmt_rx_done_event_data_t));
     memset(&rx_cfg, 0, sizeof(remote_config_t));
     rx_cfg.gpio_num = REMOTE_RX_PIN;
-    rx_cfg.queue = receive_queue;
+    rx_cfg.raw_queue = receive_queue_raw;
+    rx_cfg.encoded_queue = receive_queue;
     ESP_ERROR_CHECK(remote_create_receiver(&rx_cfg));
 
     // Setup the transmitter
-    QueueHandle_t transmit_queue = xQueueCreate(1, sizeof(rmt_tx_done_event_data_t));
+    QueueHandle_t transmit_queue_raw = xQueueCreate(1, sizeof(rmt_tx_done_event_data_t));
+    QueueHandle_t transmit_queue = xQueueCreate(TRANSMIT_QUEUE_LENGTH, sizeof(rmt_tx_done_event_data_t));
     memset(&tx_cfg, 0, sizeof(remote_config_t));
     tx_cfg.gpio_num = REMOTE_TX_PIN;
-    tx_cfg.queue = transmit_queue;
+    tx_cfg.raw_queue = transmit_queue_raw;
+    tx_cfg.encoded_queue = transmit_queue;
     ESP_ERROR_CHECK(remote_create_transmitter(&tx_cfg));
+
+
+    QueueSetHandle_t xQueueSet = xQueueCreateSet( COMBINED_LENGTH );
+    xQueueAddToSet( receive_queue, xQueueSet );
+    // xQueueAddToSet( trigger_queue, xQueueSet );
 
     // Start the rx and tx handler tasks
     xTaskCreate(rx_handler_task, "receive handler", 4096, (void*)&rx_cfg, RECEIVER_PRIORITY, NULL);
     xTaskCreate(tx_handler_task, "transmit handler", 4096, (void*)&tx_cfg, RECEIVER_PRIORITY, NULL);
-    // xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
+    
+    // Start the broadcast handling
+    xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
     // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
 
+    main_loop_config_t cfg = {
+        .xQueueSet = xQueueSet,
+        .receive_queue = receive_queue,
+        .transmit_queue = transmit_queue
+        // .trigger_queue = trigger_queue
+    };
+    xTaskCreate(main_loop_task, "main loop", 4096, (void*)&cfg, MAIN_PRIORITY, NULL);
+
     vTaskSuspend(NULL);
+}
+
+static void main_loop_task(void* pv_parameters) {
+
+    main_loop_config_t* cfg = (main_loop_config_t*) pv_parameters;    
+    remote_scan_code_t hit_msg;
+    QueueSetMemberHandle_t xActivatedMember;
+    while (true)
+    {
+        xActivatedMember = xQueueSelectFromSet( cfg->xQueueSet, portMAX_DELAY);
+        if (xActivatedMember == cfg->receive_queue)
+        {
+            xQueueReceive(xActivatedMember, &hit_msg, 0 );
+            hit(&hit_msg);
+        }
+        // else if( xActivatedMember == cfg->trigger_queue){
+        //     XQueueSend(cfg->transmit_queue, 0, 0)
+        //     /* code */
+        //}
+        
+        else{
+            ESP_LOGW(TAG, "Wrong event\n");
+            // huh? 
+        }
+    }                                           
+}
+
+static int hit(remote_scan_code_t* hit_msg){
+    
+    int status;
+    Lg__Msg* msg = malloc(sizeof(Lg__Msg));
+    lg__msg__init(msg);
+    msg->hid = "the thing";
+
+    msg->inner_case = LG__MSG__INNER_TARGET_HIT;
+    msg->targethit = malloc(sizeof(Lg__TargetHit));
+
+    lg__target_hit__init(msg->targethit);
+
+    msg->targethit->fromid = hit_msg->address << 16 | hit_msg->command;
+    
+    status = com_send_message(msg);
+    if (status < 0){
+        ESP_LOGE(TAG, "Sending target hit message failed with error %s (%d)\n", strerror(errno), errno);
+    } else {
+        ESP_LOGI(TAG, "Sent %i bytes\n", status);
+    }
+
+    free(msg->targethit);
+    free(msg);
+
+    return 0;
 }
 
 static void init_nvs(void) {

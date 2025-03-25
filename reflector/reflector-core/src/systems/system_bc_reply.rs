@@ -19,7 +19,7 @@ impl System<CoreMessage> for BroadcastSystem {
                         .unwrap_or_else(|e| warn!("{}", e));
                 } else {
                     //nothing?
-                    info!("Ignoring duplicate broadcast reply")
+                    debug!("Ignoring duplicate broadcast reply")
                 }
             }
             _ => (),
