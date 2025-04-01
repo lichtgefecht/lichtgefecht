@@ -13,17 +13,20 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "remote.h"
+#include "trigger.h"
 
 #define BROADCAST_PRIORITY 5
 #define TRIGGER_PRIORITY 5
 #define RECEIVER_PRIORITY 5
 #define MAIN_PRIORITY 5
 
+#define TRIGGER_PIN 21
 #define REMOTE_RX_PIN 38
 #define REMOTE_TX_PIN 42
 
 remote_config_t rx_cfg;
 remote_config_t tx_cfg;
+trigger_config_t trig_cfg;
 
 static const char* TAG = "tagger_main";
 
@@ -71,10 +74,16 @@ void app_main(void) {
     tx_cfg.encoded_queue = transmit_queue;
     ESP_ERROR_CHECK(remote_create_transmitter(&tx_cfg));
 
+    // Setup the trigger
+    QueueHandle_t trigger_queue = xQueueCreate(1, sizeof(gpio_num_t));
+    memset(&trig_cfg, 0, sizeof(trigger_config_t));
+    trig_cfg.gpio_num = TRIGGER_PIN;
+    trig_cfg.trig_queue = trigger_queue;
+    ESP_ERROR_CHECK(trigger_create_trigger(&trig_cfg));
 
     QueueSetHandle_t xQueueSet = xQueueCreateSet( COMBINED_LENGTH );
     xQueueAddToSet( receive_queue, xQueueSet );
-    // xQueueAddToSet( trigger_queue, xQueueSet );
+    xQueueAddToSet( trigger_queue, xQueueSet );
 
     // Start the rx and tx handler tasks
     xTaskCreate(rx_handler_task, "receive handler", 4096, (void*)&rx_cfg, RECEIVER_PRIORITY, NULL);
@@ -82,13 +91,12 @@ void app_main(void) {
     
     // Start the broadcast handling
     xTaskCreate(broadcast_handler_task, "broadcast handler", 4096, NULL, BROADCAST_PRIORITY, NULL);
-    // xTaskCreate(trigger_handler_task, "trigger handler", 4096, NULL, TRIGGER_PRIORITY, NULL);
 
     main_loop_config_t cfg = {
         .xQueueSet = xQueueSet,
         .receive_queue = receive_queue,
-        .transmit_queue = transmit_queue
-        // .trigger_queue = trigger_queue
+        .transmit_queue = transmit_queue,
+        .trigger_queue = trigger_queue,
     };
     xTaskCreate(main_loop_task, "main loop", 4096, (void*)&cfg, MAIN_PRIORITY, NULL);
 
@@ -108,10 +116,11 @@ static void main_loop_task(void* pv_parameters) {
             xQueueReceive(xActivatedMember, &hit_msg, 0 );
             hit(&hit_msg);
         }
-        // else if( xActivatedMember == cfg->trigger_queue){
-        //     XQueueSend(cfg->transmit_queue, 0, 0)
-        //     /* code */
-        //}
+        else if( xActivatedMember == cfg->trigger_queue){
+            ESP_LOGI(TAG, "Received a trigger\n");
+            // xQueueSend(cfg->transmit_queue, 0, 0)
+            /* code */
+        }
         
         else{
             ESP_LOGW(TAG, "Wrong event\n");
@@ -150,6 +159,7 @@ static int hit(remote_scan_code_t* hit_msg){
 static void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGI(TAG, "Erasing flash\n");
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
