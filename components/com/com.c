@@ -33,6 +33,7 @@ static _com_self self;
  * - we failed to connect after the maximum amount of retries */
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
+#define WIFI_STUPID_FIX_TX_POWER_MUST_NOT_BE_TOO_HIGH_XDDD 40
 
 static const char *TAG = "com";
 
@@ -117,6 +118,7 @@ void com_init_wifi_station(void) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(WIFI_STUPID_FIX_TX_POWER_MUST_NOT_BE_TOO_HIGH_XDDD));
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 
