@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 int com_init(void);
+void com_scan_wifi_networks(void);
 void com_init_wifi_station(void);
 int com_get_mac_addr(char* mac);
 int com_send_message(const Lg__Msg* msg);
