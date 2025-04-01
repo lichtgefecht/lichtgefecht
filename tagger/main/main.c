@@ -66,11 +66,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(remote_create_receiver(&rx_cfg));
 
     // Setup the transmitter
-    QueueHandle_t transmit_queue_raw = xQueueCreate(1, sizeof(rmt_tx_done_event_data_t));
-    QueueHandle_t transmit_queue = xQueueCreate(TRANSMIT_QUEUE_LENGTH, sizeof(rmt_tx_done_event_data_t));
+    QueueHandle_t transmit_queue = xQueueCreate(TRANSMIT_QUEUE_LENGTH, sizeof(gpio_num_t));
     memset(&tx_cfg, 0, sizeof(remote_config_t));
     tx_cfg.gpio_num = REMOTE_TX_PIN;
-    tx_cfg.raw_queue = transmit_queue_raw;
     tx_cfg.encoded_queue = transmit_queue;
     ESP_ERROR_CHECK(remote_create_transmitter(&tx_cfg));
 
@@ -107,6 +105,8 @@ static void main_loop_task(void* pv_parameters) {
 
     main_loop_config_t* cfg = (main_loop_config_t*) pv_parameters;    
     remote_scan_code_t hit_msg;
+    gpio_num_t trig;
+
     QueueSetMemberHandle_t xActivatedMember;
     while (true)
     {
@@ -117,16 +117,16 @@ static void main_loop_task(void* pv_parameters) {
             hit(&hit_msg);
         }
         else if( xActivatedMember == cfg->trigger_queue){
-            ESP_LOGI(TAG, "Received a trigger\n");
-            // xQueueSend(cfg->transmit_queue, 0, 0)
-            /* code */
+            xQueueReceive(xActivatedMember, &trig, 0 );
+            ESP_LOGI(TAG, "Received a trigger from pin %d\n", trig);
+            xQueueSend(cfg->transmit_queue, &trig, 0);
         }
         
         else{
             ESP_LOGW(TAG, "Wrong event\n");
             // huh? 
         }
-    }                                           
+    }
 }
 
 static int hit(remote_scan_code_t* hit_msg){

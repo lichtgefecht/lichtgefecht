@@ -89,20 +89,6 @@ static void _com_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-void com_scan_wifi_networks(void) {
-    uint16_t num_networks = 10;
-    wifi_ap_record_t ap_records[10];
-
-    ESP_LOGW(TAG, "Scanning for networks.....\n");
-
-    ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&num_networks, ap_records));
-
-    for (int i = 0; i < num_networks; i++) {
-        ESP_LOGI(TAG, "SSID: %s, RSSI: %d", ap_records[i].ssid, ap_records[i].rssi);
-    }
-}
-
 void com_init_wifi_station(void) {
     
     esp_log_level_set("wifi", ESP_LOG_VERBOSE);
@@ -160,8 +146,6 @@ void com_init_wifi_station(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(WIFI_STUPID_FIX_TX_POWER_MUST_NOT_BE_TOO_HIGH_XDDD));
 
-    // com_scan_wifi_networks();
-
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
     
     if (bits & WIFI_CONNECTED_BIT) {
@@ -170,12 +154,6 @@ void com_init_wifi_station(void) {
         ESP_LOGE(TAG, "Connection failed or timed out");
     }
 
-    esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id);
-    esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    esp_event_loop_delete_default();
-    vEventGroupDelete(s_wifi_event_group);
 }
 
 // int com_get_mac_addr(uint8_t* mac){

@@ -110,6 +110,7 @@ void rx_handler_task(void* pv_parameters) {
             
             // Parse the frame and if it is parsable send it to the encoded queue
             if (nec_parse_frame(raw_symbols, &scan_code)) {
+                ESP_LOGI(TAG, "HIIIIIIIIIIT!\n");
                 ESP_LOGI(TAG, "Received frame: Address=%04X, Command=%04X\n", scan_code.address, scan_code.command);
                 xQueueSend(rmt_cfg->encoded_queue, &scan_code, portMAX_DELAY);
             } else{
@@ -127,6 +128,7 @@ void rx_handler_task(void* pv_parameters) {
 void tx_handler_task(void* pv_parameters) {
     remote_config_t* rmt_cfg = (remote_config_t*)pv_parameters;
     remote_scan_code_t scan_code;
+    gpio_num_t pin;
 
     ESP_LOGI(TAG, "Install IR NEC encoder");
     remote_encoder_config_t nec_encoder_cfg = {
@@ -139,13 +141,14 @@ void tx_handler_task(void* pv_parameters) {
     uint16_t command = 0x0000;
 
     while (!0) {
-        vTaskDelay(100);
+        if (xQueueReceive(rmt_cfg->encoded_queue, &pin, portMAX_DELAY) == pdPASS) {
 
-        scan_code.address = addr;
-        scan_code.command = command;
-        
-        command++;
-
-        ESP_ERROR_CHECK(rmt_transmit(rmt_cfg->channel, nec_encoder, &scan_code, sizeof(scan_code), &transmit_config));
+            scan_code.address = pin;
+            scan_code.command = command;
+            
+            command++;
+            ESP_LOGI(TAG, "SHOOOOOOOOOOT!\n");
+            ESP_ERROR_CHECK(rmt_transmit(rmt_cfg->channel, nec_encoder, &scan_code, sizeof(scan_code), &transmit_config));
+        }
     }
 }
